@@ -62,11 +62,10 @@ df = utils.get_round_votes(round_address)
 #st.write(df)
 
 unique_voters = df['voter'].nunique()
+
 col1.write(f"Number of unique voters: {unique_voters}")
 col2.write(f"Number of unique projects: {df['project_name'].nunique()}")
 col1.write(f"Chain: {chain}")
-col2.write(f"Matching Token:  {token}")
-
 if token == '0x7f9a7db853ca816b9a138aee3380ef34c437dee0':
     token = '0xde30da39c46104798bb5aa3fe8b9e0e1f348163f'
     chain = 'ethereum'
@@ -74,12 +73,13 @@ if token == '0x7f9a7db853ca816b9a138aee3380ef34c437dee0':
 with st.spinner('Fetching token price...'):
     price_df = utils.get_token_price_from_dune(chain, token)
 
+
 #st.write(price_df)
 matching_token_price = price_df['price'].values[0]
 matching_token_decimals = price_df['decimals'].values[0]
 matching_token_symbol = price_df['symbol'].values[0]
-col1.write(f"Token Symbol: {matching_token_symbol}")
-
+col2.write(f"Matching Token:  {matching_token_symbol}")
+col2.write(f"Matching Token Price: ${matching_token_price:.2f}")
 
 votes_df = fundingutils.pivot_votes(df)
 
@@ -89,6 +89,10 @@ def get_matching(strategy, votes_df, matching_amount):
     return df
 
 strategies = ['COCM',  'qf']#, 'donation_profile_clustermatch', 'pairwise']  # Add or remove strategies as needed
+
+# Round to two decimal points everywhere
+# Donate units GTC or USD
+# COCM_Diff shouldn't be absolute value 
 
 votes_df = fundingutils.pivot_votes(df)
 matching_dfs = [get_matching(strategy, votes_df, matching_amount) for strategy in strategies]
@@ -109,12 +113,17 @@ Collusion-oriented cluster-matching (COCM) doesn’t make this assumption. Inste
 if 'qf' in strategies:
     for strategy in strategies:
         if strategy != 'qf':
-            matching_df[f'{strategy}_Diff'] = abs(matching_df['qf Match'] - matching_df[f'{strategy} Match'])
-            st.metric(label=f"Matching Funds Redistributed by {strategy}", value=round(matching_df[f'{strategy}_Diff'].sum(), 2))
-            st.metric(label=f"Percentage of Matching Funds Redistributed by {strategy}", value=str(round(matching_df[f'{strategy}_Diff'].sum() / matching_amount * 100, 2)) + '%')
+            matching_df[f'{strategy}_Diff'] = (matching_df['qf Match'] - matching_df[f'{strategy} Match'])
+            st.metric(label=f"Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy}_Diff'].abs().sum():.2f}" + ' ' + matching_token_symbol)
+            st.metric(label=f"Percentage of Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy}_Diff'].abs().sum() / matching_amount * 100:.2f}" + '%')
 
-st.write(matching_df)
 
+for column in matching_df.columns:
+    if column != 'Project':
+        matching_df[column] = matching_df[column].apply(lambda x: round(x, 2))
+
+st.dataframe(matching_df, use_container_width=True)
+st.write('Values shown in the table are in ' + matching_token_symbol)
 output_df = matching_df[['Project', 'COCM Match']]
 
 
@@ -124,7 +133,7 @@ projects_df = utils.get_projects_in_round(round_address)
 output_df = pd.merge(output_df, projects_df, left_on='Project', right_on='project_name', how='outer')
 output_df = output_df.rename(columns={'id': 'applicationId', 'project_id':'projectId', 'project_name': 'projectName', 'recipient_address':'payoutAddress', 'total_donations_count':'contributionsCount', 'COCM Match': 'matched', 'total_amount_donated_in_usd':'totalReceived'})
 output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddress', 'matched', 'contributionsCount', 'totalReceived']]
-output_df['matchedUSD'] = output_df['matched'] * matching_token_price
+output_df['matchedUSD'] = (output_df['matched'] * matching_token_price).round(2)
 output_df['matched'] = output_df['matched'] * 10**matching_token_decimals
 output_df['totalReceived'] = output_df['totalReceived'] * 1e18
 
