@@ -88,7 +88,7 @@ def get_matching(strategy, votes_df, matching_amount):
     df = df.rename(columns={'project_name': 'Project', 'matching_amount': f'{strategy} Match', 'matching_percent': f'{strategy} Match %'})
     return df
 
-strategies = ['COCM',  'qf']#, 'donation_profile_clustermatch', 'pairwise']  # Add or remove strategies as needed
+strategies = ['COCM',  'QF']#, 'donation_profile_clustermatch', 'pairwise']  # Add or remove strategies as needed
 
 # Round to two decimal points everywhere
 # Donate units GTC or USD
@@ -110,12 +110,12 @@ Collusion-oriented cluster-matching (COCM) doesn’t make this assumption. Inste
 ''')
 
 
-if 'qf' in strategies:
+if 'QF' in strategies:
     for strategy in strategies:
-        if strategy != 'qf':
-            matching_df[f'{strategy}_Diff'] = (matching_df['qf Match'] - matching_df[f'{strategy} Match'])
-            st.metric(label=f"Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy}_Diff'].abs().sum():.2f}" + ' ' + matching_token_symbol)
-            st.metric(label=f"Percentage of Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy}_Diff'].abs().sum() / matching_amount * 100:.2f}" + '%')
+        if strategy != 'QF':
+            matching_df[f'{strategy} Diff'] = (matching_df['QF Match'] - matching_df[f'{strategy} Match'])
+            st.metric(label=f"Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy} Diff'].abs().sum():.2f}" + ' ' + matching_token_symbol)
+            st.metric(label=f"Percentage of Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy} Diff'].abs().sum() / matching_amount * 100:.2f}" + '%')
 
 
 for column in matching_df.columns:
