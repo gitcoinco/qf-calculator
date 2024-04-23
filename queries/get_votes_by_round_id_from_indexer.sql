@@ -22,3 +22,4 @@ FROM
 LEFT JOIN "chain_data_3287eeeb342085_62".applications a ON a.round_id = d.round_id AND a.id = d.application_id
 AND a.status = 'APPROVED'
 WHERE d.round_id = '{round_address}'
+AND d.chain_id = '{chain_id}'

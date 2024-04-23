@@ -35,11 +35,11 @@ def get_round_summary():
     results = run_query(query)
     return results
 
-def get_round_votes(round_address):
+def get_round_votes(round_address, chain_id):
     sql_query_file = 'queries/get_votes_by_round_id_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
         query = file.read()
-    query = query.format(round_address=round_address)
+    query = query.format(round_address=round_address, chain_id=chain_id)
     results = run_query(query)
     return results
 

@@ -17,7 +17,8 @@ SELECT "chain_data_3287eeeb342085_62"."applications"."id" AS "id",
     "chain_data_3287eeeb342085_62"."applications"."unique_donors_count" AS "unique_donors_count"
 FROM "chain_data_3287eeeb342085_62"."applications"
 WHERE (
-        "chain_data_3287eeeb342085_62"."applications"."round_id" = '{round_address}'
+        "chain_data_3287eeeb342085_62"."applications"."round_id" = '{round_address}' AND
+        "chain_data_3287eeeb342085_62"."applications"."chain_id" = '{chain_id}' 
     )
     AND (
         "chain_data_3287eeeb342085_62"."applications"."status" = CAST(

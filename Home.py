@@ -27,13 +27,21 @@ blockchain_mapping = {
     
 if 'round_address' not in st.session_state:
     st.session_state.round_address = None
+
+if 'chain_id' not in st.session_state:
+    st.session_state.chain_id = None
     
 # Grab round_address from URL
-query_params = st.query_params.get_all('round_address')
-if len(query_params) == 1 and not st.session_state.round_address:
-    st.session_state.round_address = query_params[0]
+query_params_round_address = st.query_params.get_all('round_address')
+if len(query_params_round_address) == 1 and not st.session_state.round_address:
+    st.session_state.round_address = query_params_round_address[0]
+
+query_params_chain_id = st.query_params.get_all('chain_id')
+if len(query_params_chain_id) == 1 and not st.session_state.chain_id:
+    st.session_state.chain_id = query_params_chain_id[0]
     
 round_address = st.session_state.round_address.lower()
+chain_id = int(st.session_state.chain_id)
 
 rounds = utils.get_round_summary()
 #st.write(rounds)
@@ -58,7 +66,7 @@ col1.write(f"Gitcoin Passport Used: {sybilDefense}")
 
 
 matching_amount = rounds['matching_funds_available'].astype(float).values[0]
-df = utils.get_round_votes(round_address)
+df = utils.get_round_votes(round_address, chain_id)
 #st.write(df)
 
 unique_voters = df['voter'].nunique()
@@ -95,6 +103,13 @@ strategies = ['COCM',  'QF']#, 'donation_profile_clustermatch', 'pairwise']  # A
 # COCM_Diff shouldn't be absolute value 
 
 votes_df = fundingutils.pivot_votes(df)
+st.header('TEMP VOTES DF')
+st.write(votes_df)
+voter_data = df.groupby('voter').agg({'project_name': 'nunique', 'amountUSD': 'sum'}).reset_index()
+voter_data.columns = ['Voter', 'Number of Projects Picked', 'Sum of USD Picked']
+st.dataframe(voter_data, use_container_width=True)
+
+
 matching_dfs = [get_matching(strategy, votes_df, matching_amount) for strategy in strategies]
 
 matching_df = matching_dfs[0]
