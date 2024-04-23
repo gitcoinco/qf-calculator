@@ -103,11 +103,8 @@ strategies = ['COCM',  'QF']#, 'donation_profile_clustermatch', 'pairwise']  # A
 # COCM_Diff shouldn't be absolute value 
 
 votes_df = fundingutils.pivot_votes(df)
-st.header('TEMP VOTES DF')
-st.write(votes_df)
 voter_data = df.groupby('voter').agg({'project_name': 'nunique', 'amountUSD': 'sum'}).reset_index()
 voter_data.columns = ['Voter', 'Number of Projects Picked', 'Sum of USD Picked']
-st.dataframe(voter_data, use_container_width=True)
 
 
 matching_dfs = [get_matching(strategy, votes_df, matching_amount) for strategy in strategies]
@@ -129,6 +126,7 @@ if 'QF' in strategies:
     for strategy in strategies:
         if strategy != 'QF':
             matching_df[f'{strategy} Diff'] = (matching_df['QF Match'] - matching_df[f'{strategy} Match'])
+            
             st.metric(label=f"Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy} Diff'].abs().sum():.2f}" + ' ' + matching_token_symbol)
             st.metric(label=f"Percentage of Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy} Diff'].abs().sum() / matching_amount * 100:.2f}" + '%')
 
@@ -142,7 +140,7 @@ st.write('Values shown in the table are in ' + matching_token_symbol)
 output_df = matching_df[['Project', 'COCM Match']]
 
 
-projects_df = utils.get_projects_in_round(round_address)
+projects_df = utils.get_projects_in_round(round_address, chain_id)
 
 
 output_df = pd.merge(output_df, projects_df, left_on='Project', right_on='project_name', how='outer')

@@ -43,15 +43,15 @@ def get_round_votes(round_address, chain_id):
     results = run_query(query)
     return results
 
-def get_projects_in_round(round_address):
+def get_projects_in_round(round_address, chain_id):
     sql_query_file = 'queries/get_projects_summary_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
         query = file.read()
-    query = query.format(round_address=round_address)
+    query = query.format(round_address=round_address, chain_id=chain_id)
     results = run_query(query)
     return results
 
-#@st.cache(ttl=3600,  hash_funcs={DuneClient: id})
+#@st.cache(ttl=3600, allow_output_mutation=True)
 def get_token_price_from_dune(blockchain, token_address):
     DUNE_API_KEY = st.secrets['dune']['DUNE_API_KEY']
     sql_query_file = 'queries/get_token_price_from_dune.sql'
