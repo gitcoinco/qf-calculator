@@ -25,27 +25,27 @@ blockchain_mapping = {
         534352: "scroll"
     }
     
-if 'round_address' not in st.session_state:
-    st.session_state.round_address = None
+if 'round_id' not in st.session_state:
+    st.session_state.round_id = None
 
 if 'chain_id' not in st.session_state:
     st.session_state.chain_id = None
     
-# Grab round_address from URL
-query_params_round_address = st.query_params.get_all('round_address')
-if len(query_params_round_address) == 1 and not st.session_state.round_address:
-    st.session_state.round_address = query_params_round_address[0]
+# Grab round_id from URL
+query_params_round_id = st.query_params.get_all('round_id')
+if len(query_params_round_id) == 1 and not st.session_state.round_id:
+    st.session_state.round_id = query_params_round_id[0]
 
 query_params_chain_id = st.query_params.get_all('chain_id')
 if len(query_params_chain_id) == 1 and not st.session_state.chain_id:
     st.session_state.chain_id = query_params_chain_id[0]
     
-round_address = st.session_state.round_address.lower()
+round_id = st.session_state.round_id.lower()
 chain_id = int(st.session_state.chain_id)
 
 rounds = utils.get_round_summary()
 #st.write(rounds)
-rounds = rounds[rounds['round_id'].str.lower() == round_address]
+rounds = rounds[rounds['round_id'].str.lower() == round_id]
 
 round_name = rounds['round_name'].values[0]
 matching_cap_amount = rounds['matching_cap_amount'].astype(float).values[0] if 'matching_cap_amount' in rounds and not pd.isnull(rounds['matching_cap_amount'].values[0]) else 'No Cap'
@@ -64,19 +64,23 @@ col2.write(f"Minimum Donation Threshold Amount: {min_donation_threshold_amount}"
 col1.write(f"Gitcoin Passport Used: {sybilDefense}")
 
 
-
 matching_amount = rounds['matching_funds_available'].astype(float).values[0]
-df = utils.get_round_votes(round_address, chain_id)
+df = utils.get_round_votes(round_id, chain_id)
 #st.write(df)
 
-unique_voters = df['voter'].nunique()
-
-col1.write(f"Number of unique voters: {unique_voters}")
+col1.write(f"Number of unique voters: {df['voter'].nunique()}")
 col2.write(f"Number of unique projects: {df['project_name'].nunique()}")
 col1.write(f"Chain: {chain}")
 if token == '0x7f9a7db853ca816b9a138aee3380ef34c437dee0':
     token = '0xde30da39c46104798bb5aa3fe8b9e0e1f348163f'
     chain = 'ethereum'
+
+#st.header('👀 start passport tests 💦')
+#unique_voters = df['voter'].drop_duplicates()
+#st.write(f"Total number of rows in unique_voters: {len(unique_voters)}")
+#scores = utils.load_passport_model_scores(unique_voters)
+#st.write(f"Total number of scores: {len(scores)}")
+#st.write(scores)
 
 with st.spinner('Fetching token price...'):
     price_df = utils.get_token_price_from_dune(chain, token)
@@ -140,7 +144,7 @@ st.write('Values shown in the table are in ' + matching_token_symbol)
 output_df = matching_df[['Project', 'COCM Match']]
 
 
-projects_df = utils.get_projects_in_round(round_address, chain_id)
+projects_df = utils.get_projects_in_round(round_id, chain_id)
 
 
 output_df = pd.merge(output_df, projects_df, left_on='Project', right_on='project_name', how='outer')
@@ -148,7 +152,7 @@ output_df = output_df.rename(columns={'id': 'applicationId', 'project_id':'proje
 output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddress', 'matched', 'contributionsCount', 'totalReceived']]
 output_df['matchedUSD'] = (output_df['matched'] * matching_token_price).round(2)
 output_df['matched'] = output_df['matched'] * 10**matching_token_decimals
-output_df['totalReceived'] = output_df['totalReceived'] * 1e18
+output_df['totalReceived'] = output_df['totalReceived'] * (1e18) # come back and put in round token
 
 # Add additional columns
 output_df['matched'] = output_df['matched'].apply(lambda x: '{:.0f}'.format(x) if pd.notnull(x) else x)   
