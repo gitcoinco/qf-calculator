@@ -14,15 +14,15 @@ st.set_page_config(
 )
 
 blockchain_mapping = {
-        1: "ethereum",
-        10: "optimism",
-        137: "polygon",
-        250: "fantom",
-        324: "zksync",
-        8453: "base",
-        42161: "arbitrum",
-        43114: "avalanche_c",
-        534352: "scroll"
+        1: "Ethereum",
+        10: "Optimism",
+        137: "Polygon",
+        250: "Fantom",
+        324: "ZKSync",
+        8453: "Base",
+        42161: "Arbitrum",
+        43114: "Avalanche",
+        534352: "Scroll"
     }
     
 if 'round_id' not in st.session_state:
@@ -72,8 +72,8 @@ df = utils.get_round_votes(round_id, chain_id)
 
 col1.write(f"Number of unique voters: {df['voter'].nunique()}")
 col2.write(f"Number of unique projects: {df['project_name'].nunique()}")
-col1.write(f"Starting Chain: {chain}")
-col1.write(f"Starting Token: {token}")
+col1.write(f"Chain: {chain}")
+
 
 #st.header('👀 start passport tests 💦')
 #unique_voters = df['voter'].drop_duplicates()
@@ -85,21 +85,14 @@ col1.write(f"Starting Token: {token}")
 config_df = utils.fetch_tokens_config()
 
 config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
-st.write(config_df)
 price_source_chain_id = config_df['price_source_chain_id'].iloc[0]
 price_source_token_address = config_df['price_source_address'].iloc[0]
-st.write(price_source_chain_id)
-st.write(price_source_token_address)
-
-
-with st.spinner('Fetching token price...'):
-    price = utils.fetch_latest_price(price_source_chain_id, price_source_token_address)
-
-
-#st.write(price_df)
-matching_token_price = price
 matching_token_decimals = config_df['token_decimals'].iloc[0]
 matching_token_symbol = config_df['token_code'].iloc[0]
+
+with st.spinner('Fetching token price...'):
+    matching_token_price = utils.fetch_latest_price(price_source_chain_id, price_source_token_address)
+
 col2.write(f"Matching Token:  {matching_token_symbol}")
 col2.write(f"Matching Token Price: ${matching_token_price:.2f}")
 

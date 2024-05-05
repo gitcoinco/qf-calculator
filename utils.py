@@ -180,7 +180,7 @@ def fetch_tokens_config():
 
 
 @st.cache_resource(ttl=3600)
-def fetch_latest_price(chain_id, token_address, coingecko_api_key="CG-CzdSLium6uDd1hFb3Svyc5dp", coingecko_api_url="https://api.coingecko.com/api/v3"):
+def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['coingecko']['COINGECKO_API_KEY'], coingecko_api_url="https://api.coingecko.com/api/v3"):
     platforms = {
         1: "ethereum",
         250: "fantom",
@@ -190,13 +190,28 @@ def fetch_latest_price(chain_id, token_address, coingecko_api_key="CG-CzdSLium6u
         713715: "sei-network",
     }
 
+    native_tokens = {
+        1: "ethereum",
+        250: "fantom",
+        10: "ethereum",
+        42161: "ethereum",
+        43114: "avalanche-2",
+        713715: "sei-network",
+    }
+
     if chain_id not in platforms:
         raise ValueError(f"Prices for chain ID {chain_id} are not supported.")
 
     is_native_token = token_address == "0x0000000000000000000000000000000000000000"
     platform = platforms[chain_id]
 
-    path = f"/simple/price?ids={platform}&vs_currencies=usd" if is_native_token else f"/simple/token_price/{platform}?contract_addresses={token_address}&vs_currencies=usd"
+    if is_native_token:
+        path = f"/simple/price?ids={native_tokens[chain_id]}&vs_currencies=usd"
+        key = native_tokens[chain_id]
+    else:
+        path = f"/simple/token_price/{platform}?contract_addresses={token_address}&vs_currencies=usd"
+        key = token_address
+
     headers = {
         "accept": "application/json",
         "x-cg-demo-api-key": coingecko_api_key
@@ -220,8 +235,8 @@ def fetch_latest_price(chain_id, token_address, coingecko_api_key="CG-CzdSLium6u
     if "error" in response_data:
         raise ValueError(f"Error from CoinGecko API: {response_data}")
 
-    key = platform if is_native_token else token_address
     if key not in response_data:
         raise ValueError(f"Token {'native' if is_native_token else 'address'} '{key}' not found in the response data.")
 
     return response_data[key]["usd"]
+
