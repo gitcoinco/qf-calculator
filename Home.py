@@ -45,7 +45,8 @@ chain_id = int(st.session_state.chain_id)
 
 rounds = utils.get_round_summary()
 #st.write(rounds)
-rounds = rounds[rounds['round_id'].str.lower() == round_id]
+rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)]
+
 
 round_name = rounds['round_name'].values[0]
 matching_cap_amount = rounds['matching_cap_amount'].astype(float).values[0] if 'matching_cap_amount' in rounds and not pd.isnull(rounds['matching_cap_amount'].values[0]) else 'No Cap'
@@ -63,6 +64,7 @@ col2.write(f"Matching Available: {matching_funds_available}")
 col2.write(f"Minimum Donation Threshold Amount: {min_donation_threshold_amount}")
 col1.write(f"Gitcoin Passport Used: {sybilDefense}")
 
+#st.write(rounds)
 
 matching_amount = rounds['matching_funds_available'].astype(float).values[0]
 df = utils.get_round_votes(round_id, chain_id)
