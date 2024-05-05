@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
+import re
 from datetime import datetime, timezone
 import psycopg2 as pg
 import json
 from dune_client.types import QueryParameter
 from dune_client.client import DuneClient
-
+import time
 
 
 @st.cache_resource(ttl=36000)
@@ -29,6 +30,7 @@ def run_query(query):
         conn.close()
     return results
 
+@st.cache_resource(ttl=36000)
 def run_query_with_params(query, params):
     conn = pg.connect(host=st.secrets["database"]["host"], 
                            port=st.secrets["database"]["port"], 
@@ -106,3 +108,120 @@ def load_passport_model_scores(addresses):
     scores = scores[scores['address'].isin(addresses)]
     scores = scores.sort_values('updated_at', ascending=False).drop_duplicates('address')
     return scores
+
+def parse_config_file(file_content):
+    data = []
+    chain_pattern = re.compile(r'{\s*id:\s*(\d+),\s*name:\s*"([^"]+)",.*?tokens:\s*\[(.*?)\].*?}', re.DOTALL)
+    token_pattern = re.compile(r'code:\s*"(?P<code>[^"]+)".*?address:\s*"(?P<address>[^"]+)".*?decimals:\s*(?P<decimals>\d+).*?priceSource:\s*{\s*chainId:\s*(?P<price_source_chain_id>\d+).*?address:\s*"(?P<price_source_address>[^"]+)"', re.DOTALL)
+    chain_matches = chain_pattern.findall(file_content)
+    print(f"Number of chain matches: {len(chain_matches)}")
+
+    for chain_match in chain_matches:
+        chain_id = int(chain_match[0])
+        chain_name = chain_match[1]
+        token_data = chain_match[2]
+
+        #print(f"Chain ID: {chain_id}, Chain Name: {chain_name}")
+        #print(f"Token Data: {token_data}")
+
+        token_matches = token_pattern.finditer(token_data)
+
+        for token_match in token_matches:
+            #print(f"Token Match: {token_match.group()}")
+            token_code = token_match.group('code')
+            token_address = token_match.group('address')
+            token_decimals = int(token_match.group('decimals'))
+            price_source_chain_id = int(token_match.group('price_source_chain_id'))
+            price_source_address = token_match.group('price_source_address')
+
+            #print(f"Token Code: {token_code}, Token Address: {token_address}")
+
+            data.append([
+                chain_id,
+                chain_name,
+                token_code,
+                token_address,
+                token_decimals,
+                price_source_chain_id,
+                price_source_address
+            ])
+    #print(f"Data: {data}")
+    if data:
+        columns = [
+            'chain_id',
+            'chain_name',
+            'token_code',
+            'token_address',
+            'token_decimals',
+            'price_source_chain_id',
+            'price_source_address'
+        ]
+        df = pd.DataFrame(data, columns=columns)
+        df['token_address'] = df['token_address'].str.lower()
+        df['price_source_address'] = df['price_source_address'].str.lower()
+        return df
+    else:
+        print("No token data found in the file.")
+        return None
+    
+@st.cache_resource(ttl=3600)
+def fetch_tokens_config():
+    url = 'https://raw.githubusercontent.com/gitcoinco/grants-stack-indexer/main/src/config.ts'
+    
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an error for bad responses
+    except requests.RequestException as e:
+        print(f"Failed to fetch data from {url}. Error: {e}")
+        return None
+
+    df = parse_config_file(response.text)
+    return df
+
+
+@st.cache_resource(ttl=3600)
+def fetch_latest_price(chain_id, token_address, coingecko_api_key="CG-CzdSLium6uDd1hFb3Svyc5dp", coingecko_api_url="https://api.coingecko.com/api/v3"):
+    platforms = {
+        1: "ethereum",
+        250: "fantom",
+        10: "optimistic-ethereum",
+        42161: "arbitrum-one",
+        43114: "avalanche",
+        713715: "sei-network",
+    }
+
+    if chain_id not in platforms:
+        raise ValueError(f"Prices for chain ID {chain_id} are not supported.")
+
+    is_native_token = token_address == "0x0000000000000000000000000000000000000000"
+    platform = platforms[chain_id]
+
+    path = f"/simple/price?ids={platform}&vs_currencies=usd" if is_native_token else f"/simple/token_price/{platform}?contract_addresses={token_address}&vs_currencies=usd"
+    headers = {
+        "accept": "application/json",
+        "x-cg-demo-api-key": coingecko_api_key
+    }
+
+    max_retries = 4
+    retry_delay = 4  # seconds
+
+    for retry_count in range(max_retries):
+        response = requests.get(f"{coingecko_api_url}{path}", headers=headers)
+
+        if response.status_code == 429:
+            if retry_count == max_retries - 1:
+                raise ValueError("CoinGecko API rate limit exceeded, are you using an API key?")
+            time.sleep(retry_delay)
+        else:
+            break
+
+    response_data = response.json()
+
+    if "error" in response_data:
+        raise ValueError(f"Error from CoinGecko API: {response_data}")
+
+    key = platform if is_native_token else token_address
+    if key not in response_data:
+        raise ValueError(f"Token {'native' if is_native_token else 'address'} '{key}' not found in the response data.")
+
+    return response_data[key]["usd"]

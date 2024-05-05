@@ -72,10 +72,8 @@ df = utils.get_round_votes(round_id, chain_id)
 
 col1.write(f"Number of unique voters: {df['voter'].nunique()}")
 col2.write(f"Number of unique projects: {df['project_name'].nunique()}")
-col1.write(f"Chain: {chain}")
-if token == '0x7f9a7db853ca816b9a138aee3380ef34c437dee0':
-    token = '0xde30da39c46104798bb5aa3fe8b9e0e1f348163f'
-    chain = 'ethereum'
+col1.write(f"Starting Chain: {chain}")
+col1.write(f"Starting Token: {token}")
 
 #st.header('👀 start passport tests 💦')
 #unique_voters = df['voter'].drop_duplicates()
@@ -84,14 +82,24 @@ if token == '0x7f9a7db853ca816b9a138aee3380ef34c437dee0':
 #st.write(f"Total number of scores: {len(scores)}")
 #st.write(scores)
 
+config_df = utils.fetch_tokens_config()
+
+config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
+st.write(config_df)
+price_source_chain_id = config_df['price_source_chain_id'].iloc[0]
+price_source_token_address = config_df['price_source_address'].iloc[0]
+st.write(price_source_chain_id)
+st.write(price_source_token_address)
+
+
 with st.spinner('Fetching token price...'):
-    price_df = utils.get_token_price_from_dune(chain, token)
+    price = utils.fetch_latest_price(price_source_chain_id, price_source_token_address)
 
 
 #st.write(price_df)
-matching_token_price = price_df['price'].values[0]
-matching_token_decimals = price_df['decimals'].values[0]
-matching_token_symbol = price_df['symbol'].values[0]
+matching_token_price = price
+matching_token_decimals = config_df['token_decimals'].iloc[0]
+matching_token_symbol = config_df['token_code'].iloc[0]
 col2.write(f"Matching Token:  {matching_token_symbol}")
 col2.write(f"Matching Token Price: ${matching_token_price:.2f}")
 
