@@ -313,35 +313,26 @@ def standard_donation(donation_df):
   funding = {p: donation_df[p].sum() for p in projects}
   return funding
 
-def apply_sliding_scale(votes_data):
+def apply_voting_eligibility(votes_data, min_donation_threshold, score_at_50_percent, score_at_100_percent):
+    votes_data['self_vote'] = (votes_data['voter'] == votes_data['recipient_address']).astype(int) 
+    votes_data['low_score'] = (votes_data['rawScore'] < score_at_50_percent).astype(int) 
+    votes_data['low_amount'] = (votes_data['amountUSD'] < min_donation_threshold).astype(int) 
+    # base votes are when low_amount = 0, low_score = 0, and self_vote = 0
+    votes_data['base_vote'] = np.all([votes_data['low_amount'] == 0, votes_data['low_score'] == 0, votes_data['self_vote'] == 0], axis=0).astype(int)
+    
     # Define the score range and corresponding scaling factors
-    score_range = np.array([15, 25])
+    score_range = np.array([score_at_50_percent, score_at_100_percent])
     scale_range = np.array([0.5, 1.0])
 
     # Apply the scaling factor to the 'amountUSD' column based on the 'score' column
     votes_data['starting_amountUSD'] = votes_data['amountUSD']
-    votes_data['amountUSD'] = votes_data['amountUSD'] * np.interp(votes_data['score'], score_range, scale_range)
-
-    # If the score is below 15, set the scaling factor to 0
-    votes_data.loc[votes_data['score'] < 15, 'amountUSD'] = 0
-
-    # If the score is above 25, set the scaling factor to 1
-    votes_data.loc[votes_data['score'] > 25, 'amountUSD'] = votes_data['starting_amountUSD']
-
+    votes_data['amountUSD'] = votes_data['amountUSD'] * np.interp(votes_data['rawScore'], score_range, scale_range)
+    # If the score is above the 100 percent target, set the scaling factor to 1
+    votes_data.loc[votes_data['rawScore'] > score_at_100_percent, 'amountUSD'] = votes_data['starting_amountUSD']
+    # If the score is not a base vote , set the scaling factor to 0
+    votes_data.loc[votes_data['base_vote'] == 0, 'amountUSD'] = 0
     return votes_data
 
-def flag_base_votes(votes, min_donation_threshold, score_threshold):
-    votes['self_vote'] = (votes['voter'] == votes['grantAddress']).astype(int) 
-    votes['low_score'] = (votes['score'] < score_threshold).astype(int) 
-    votes['low_amount'] = (votes['amountUSD'] < min_donation_threshold).astype(int) 
-    # base votes are when low_amount = 0, low_score = 0, self_vote = 0
-    votes['base_vote'] = np.all([votes['low_amount'] == 0, votes['low_score'] == 0, votes['self_vote'] == 0], axis=0).astype(int)
-    return votes
-
-def prep_donations_data(votes_data, min_donation_threshold, score_threshold):
-  votes_data = flag_base_votes(votes_data, min_donation_threshold, score_threshold)
-  votes_data = apply_sliding_scale(votes_data)
-  return votes_data
 
 def pivot_votes(round_votes):
     pivot_votes = round_votes.pivot_table(index='voter', columns='project_name', values='amountUSD', fill_value=0)
@@ -364,7 +355,7 @@ def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cl
     result = pd.DataFrame(list(funding_normalized.items()), columns=['project_name', 'matching_amount'])
     # Apply the cap to the 'matching_amount' column
     if matching_cap_percent < 100:
-      result['matching_amount'] = check_matching_cap(result['matching_amount'], matching_cap_percent)
+      result['matching_amount'] = check_matching_cap(result['matching_amount'], matching_cap_percent/100)
     # Scale the 'matching_amount' column by the total matching amount
     result['matching_percent'] = result['matching_amount'] * 100
     result['matching_amount'] = result['matching_amount'] * matching_amount

@@ -105,6 +105,7 @@ def load_passport_model_scores(addresses):
     scores = load_data_from_url(url)
     scores = pd.DataFrame(scores)
     scores = scores.join(pd.json_normalize(scores['data'])).drop('data', axis=1)
+    scores['address'] = scores['address'].str.lower()
     scores = scores[scores['address'].isin(addresses)]
     scores = scores.sort_values('updated_at', ascending=False).drop_duplicates('address')
     scores['score'] = scores['score'].astype(float)

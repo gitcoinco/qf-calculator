@@ -4,7 +4,7 @@ SELECT
     d.chain_id,
     d.round_id,
     d.application_id,
-    d.donor_address as "voter",
+    lower(d.donor_address) as "voter",
     d.recipient_address,
     d.project_id,
     d.transaction_hash,

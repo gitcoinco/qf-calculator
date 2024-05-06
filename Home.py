@@ -72,12 +72,18 @@ unique_voters = df['voter'].drop_duplicates()
 
 if chain_id == 43114: 
     scores = utils.load_avax_scores(unique_voters)
+    score_at_50_percent = 25
+    score_at_100_percent = 25
     st.write('Using Avalanche Passport')
 elif sybilDefense == 'true':
     st.write('Using Passport Stamps')
+    score_at_50_percent = 15
+    score_at_100_percent = 25
     scores = utils.load_stamp_scores(unique_voters)
 else:
     st.write('Using Passport Model Based Detection System')
+    score_at_50_percent = 1
+    score_at_100_percent = 25
     scores = utils.load_passport_model_scores(unique_voters)
 
 
@@ -98,22 +104,32 @@ col1, col2 = st.columns(2)
 col1.write(f"Chain: {chain}")
 col1.write(f"Matching Cap: {matching_cap_amount:.2f}%")
 col1.write(f"Gitcoin Passport Used: {sybilDefense.capitalize()}")
-col1.write(f"Number of Unique Voters: {df['voter'].nunique()}")
-col1.write(f"Users With Passport: {len(scores)}")
-
+total_voters = df['voter'].nunique()
+col1.write(f"Number of Unique Voters: {total_voters}")
+col1.write(f"Users With Passport: {len(scores)} ({len(scores)/total_voters*100:.2f}%)")
+col1.write(f"Users With Passing Passport: {len(scores[scores['rawScore'] >= score_at_50_percent])} ({len(scores[scores['rawScore'] >= score_at_50_percent])/total_voters*100:.2f}%)")
 col2.write(f"Matching Available: {matching_funds_available:.2f}")
 col2.write(f"Matching Token:  {matching_token_symbol}")
 col2.write(f"Matching Token Price: ${matching_token_price:.2f}")
 col2.write(f"Minimum Donation Threshold Amount: ${min_donation_threshold_amount:.2f}")
 col2.write(f"Number of Unique Projects: {df['project_name'].nunique()}")
 
+if min_donation_threshold_amount == 1.0:
+    min_donation_threshold_amount = 0.99
 
+df = pd.merge(df, scores[['address', 'rawScore']], left_on='voter', right_on='address', how='left')
+#turn_off_passport = st.sidebar.checkbox('Turn off passport', value=False)
+#if turn_off_passport:
+#    st.write('Passport is turned off')
+#    score_at_50_percent = 0
+#    score_at_100_percent = 0
 
-
+df = fundingutils.apply_voting_eligibility(df, min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
+#st.write(df)
 votes_df = fundingutils.pivot_votes(df)
 
 def get_matching(strategy, votes_df, matching_amount):
-    df = fundingutils.get_qf_matching(strategy, votes_df, 100, matching_amount, cluster_df = votes_df)
+    df = fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_amount, cluster_df = votes_df)
     df = df.rename(columns={'project_name': 'Project', 'matching_amount': f'{strategy} Match', 'matching_percent': f'{strategy} Match %'})
     return df
 
@@ -153,7 +169,7 @@ for column in matching_df.columns:
         matching_df[column] = matching_df[column].apply(lambda x: round(x, 2))
 
 st.dataframe(matching_df, use_container_width=True)
-st.write('Values shown in the table are in ' + matching_token_symbol)
+st.markdown('Matching Values shown above are in **' + matching_token_symbol + '**')
 output_df = matching_df[['Project', 'COCM Match']]
 
 
