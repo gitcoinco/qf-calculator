@@ -49,7 +49,7 @@ rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id
 
 
 round_name = rounds['round_name'].values[0]
-matching_cap_amount = rounds['matching_cap_amount'].astype(float).values[0] if 'matching_cap_amount' in rounds and not pd.isnull(rounds['matching_cap_amount'].values[0]) else 'No Cap'
+matching_cap_amount = rounds['matching_cap_amount'].astype(float).values[0] if 'matching_cap_amount' in rounds and not pd.isnull(rounds['matching_cap_amount'].values[0]) else 100.0
 matching_funds_available = rounds['matching_funds_available'].astype(float).values[0] if 'matching_funds_available' in rounds else 0
 min_donation_threshold_amount = rounds['min_donation_threshold_amount'].astype(float).values[0] if 'min_donation_threshold_amount' in rounds and not pd.isnull(rounds['min_donation_threshold_amount'].values[0]) else 0.0
 sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else False
