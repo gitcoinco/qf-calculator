@@ -107,6 +107,34 @@ def load_passport_model_scores(addresses):
     scores = scores.join(pd.json_normalize(scores['data'])).drop('data', axis=1)
     scores = scores[scores['address'].isin(addresses)]
     scores = scores.sort_values('updated_at', ascending=False).drop_duplicates('address')
+    scores['score'] = scores['score'].astype(float)
+    scores['rawScore'] = scores['score']
+    return scores
+
+def load_avax_scores(addresses):
+    url = 'https://public.scorer.gitcoin.co/passport_scores/6608/registry_score.jsonl'
+    scores = load_data_from_url(url)
+    scores = pd.DataFrame(scores)
+    scores = scores.join(pd.json_normalize(scores['evidence'])).drop('evidence', axis=1)
+    scores = scores.join(pd.json_normalize(scores['passport'])).drop('passport', axis=1) 
+    scores['CivicUniquenessPass'] = scores['stamp_scores'].apply(lambda x: x.get('CivicUniquenessPass', 0))
+    scores['HolonymGovIdProvider'] = scores['stamp_scores'].apply(lambda x: x.get('HolonymGovIdProvider', 0))
+    scores = scores[scores['address'].isin(addresses)]
+    scores = scores.sort_values('last_score_timestamp', ascending=False).drop_duplicates('address')
+    scores['score'] = scores['score'].astype(float)
+    scores['rawScore'] = scores['rawScore'].astype(float)
+
+    return scores
+
+def load_stamp_scores(addresses):
+    url = 'https://public.scorer.gitcoin.co/passport_scores/335/registry_score.jsonl'
+    scores = load_data_from_url(url)
+    scores = pd.DataFrame(scores)
+    scores = scores.join(pd.json_normalize(scores['passport'])).drop('passport', axis=1)
+    scores = scores.join(pd.json_normalize(scores['evidence'])).drop('evidence', axis=1)
+    scores = scores[scores['address'].isin(addresses)]
+    scores['score'] = scores['score'].astype(float)
+    scores['rawScore'] = scores['rawScore'].astype(float)
     return scores
 
 def parse_config_file(file_content):

@@ -14,4 +14,4 @@ FROM
 WHERE 
     a.round_id = %(round_id)s AND
     a.chain_id = %(chain_id)s
-    AND a."status" = CAST('APPROVED' AS "chain_data_63"."application_status");
+    AND a."status" = 'APPROVED' ;

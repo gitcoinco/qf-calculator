@@ -57,12 +57,6 @@ token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
 chain = blockchain_mapping.get(rounds['chain_id'].values[0] if 'chain_id' in rounds else 1)
 
 st.title(f'{round_name} Cluster Match Results')
-st.header('⚙️ Round Settings')
-col1, col2 = st.columns(2)
-col1.write(f"Matching Cap (%) Amount: {matching_cap_amount}")
-col2.write(f"Matching Available: {matching_funds_available}")
-col2.write(f"Minimum Donation Threshold Amount: {min_donation_threshold_amount}")
-col1.write(f"Gitcoin Passport Used: {sybilDefense}")
 
 #st.write(rounds)
 
@@ -70,18 +64,24 @@ matching_amount = rounds['matching_funds_available'].astype(float).values[0]
 df = utils.get_round_votes(round_id, chain_id)
 #st.write(df)
 
-col1.write(f"Number of unique voters: {df['voter'].nunique()}")
-col2.write(f"Number of unique projects: {df['project_name'].nunique()}")
-col1.write(f"Chain: {chain}")
 
 
-#st.header('👀 start passport tests 💦')
-#unique_voters = df['voter'].drop_duplicates()
-#st.write(f"Total number of rows in unique_voters: {len(unique_voters)}")
-#scores = utils.load_passport_model_scores(unique_voters)
-#st.write(f"Total number of scores: {len(scores)}")
-#st.write(scores)
 
+## LOAD PASSPORT DATA 
+unique_voters = df['voter'].drop_duplicates()
+
+if chain_id == 43114: 
+    scores = utils.load_avax_scores(unique_voters)
+    st.write('Using Avalanche Passport')
+elif sybilDefense == 'true':
+    st.write('Using Passport Stamps')
+    scores = utils.load_stamp_scores(unique_voters)
+else:
+    st.write('Using Passport Model Based Detection System')
+    scores = utils.load_passport_model_scores(unique_voters)
+
+
+## LOAD TOKEN DATA 
 config_df = utils.fetch_tokens_config()
 
 config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
@@ -93,8 +93,22 @@ matching_token_symbol = config_df['token_code'].iloc[0]
 with st.spinner('Fetching token price...'):
     matching_token_price = utils.fetch_latest_price(price_source_chain_id, price_source_token_address)
 
+st.header('⚙️ Round Settings')
+col1, col2 = st.columns(2)
+col1.write(f"Chain: {chain}")
+col1.write(f"Matching Cap: {matching_cap_amount:.2f}%")
+col1.write(f"Gitcoin Passport Used: {sybilDefense.capitalize()}")
+col1.write(f"Number of Unique Voters: {df['voter'].nunique()}")
+col1.write(f"Users With Passport: {len(scores)}")
+
+col2.write(f"Matching Available: {matching_funds_available:.2f}")
 col2.write(f"Matching Token:  {matching_token_symbol}")
 col2.write(f"Matching Token Price: ${matching_token_price:.2f}")
+col2.write(f"Minimum Donation Threshold Amount: ${min_donation_threshold_amount:.2f}")
+col2.write(f"Number of Unique Projects: {df['project_name'].nunique()}")
+
+
+
 
 votes_df = fundingutils.pivot_votes(df)
 
@@ -104,10 +118,6 @@ def get_matching(strategy, votes_df, matching_amount):
     return df
 
 strategies = ['COCM',  'QF']#, 'donation_profile_clustermatch', 'pairwise']  # Add or remove strategies as needed
-
-# Round to two decimal points everywhere
-# Donate units GTC or USD
-# COCM_Diff shouldn't be absolute value 
 
 votes_df = fundingutils.pivot_votes(df)
 voter_data = df.groupby('voter').agg({'project_name': 'nunique', 'amountUSD': 'sum'}).reset_index()
@@ -132,7 +142,7 @@ Collusion-oriented cluster-matching (COCM) doesn’t make this assumption. Inste
 if 'QF' in strategies:
     for strategy in strategies:
         if strategy != 'QF':
-            matching_df[f'{strategy} Diff'] = (matching_df['QF Match'] - matching_df[f'{strategy} Match'])
+            matching_df[f'{strategy} Diff'] = ( matching_df[f'{strategy} Match'] - matching_df['QF Match'] )
             
             st.metric(label=f"Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy} Diff'].abs().sum():.2f}" + ' ' + matching_token_symbol)
             st.metric(label=f"Percentage of Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy} Diff'].abs().sum() / matching_amount * 100:.2f}" + '%')

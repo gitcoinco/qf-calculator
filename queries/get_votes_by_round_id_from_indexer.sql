@@ -15,8 +15,13 @@ SELECT
     d.amount_in_round_match_token
 FROM
     "chain_data_63".donations d
-LEFT JOIN "chain_data_63".applications a ON a.round_id = d.round_id AND a.id = d.application_id
-AND a.status = 'APPROVED'
+LEFT JOIN "chain_data_63".applications a 
+  ON 
+    a.round_id = d.round_id AND 
+    a.chain_id = d.chain_id AND
+    a.id = d.application_id
 WHERE
     d.round_id = %(round_id)s AND
-    d.chain_id = %(chain_id)s;
+    d.chain_id = %(chain_id)s
+    AND a.status = 'APPROVED' 
+    ;
