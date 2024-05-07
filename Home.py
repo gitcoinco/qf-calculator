@@ -86,7 +86,6 @@ else:
     score_at_100_percent = 25
     scores = utils.load_passport_model_scores(unique_voters)
 
-
 ## LOAD TOKEN DATA 
 config_df = utils.fetch_tokens_config()
 
