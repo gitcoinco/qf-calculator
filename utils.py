@@ -101,7 +101,7 @@ def load_data_from_url(url):
     
 
 def load_passport_model_scores(addresses):
-    url = 'https://public.scorer.gitcoin.co/eth_model_scores/eth_model_scores.jsonl'
+    url = 'https://public.scorer.gitcoin.co/eth_model_scores_v2/eth_model_scores.jsonl'
     scores = load_data_from_url(url)
     scores = pd.DataFrame(scores)
     scores = scores.join(pd.json_normalize(scores['data'])).drop('data', axis=1)

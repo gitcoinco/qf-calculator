@@ -56,7 +56,7 @@ sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else
 token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
 chain = blockchain_mapping.get(rounds['chain_id'].values[0] if 'chain_id' in rounds else 1)
 
-st.title(f'{round_name} Cluster Match Results')
+st.title(f'{round_name}')
 
 #st.write(rounds)
 
@@ -70,18 +70,19 @@ df = utils.get_round_votes(round_id, chain_id)
 ## LOAD PASSPORT DATA 
 unique_voters = df['voter'].drop_duplicates()
 
+
 if chain_id == 43114: 
     scores = utils.load_avax_scores(unique_voters)
     score_at_50_percent = 25
     score_at_100_percent = 25
-    st.write('Using Avalanche Passport')
+    st.header('Cluster Match Results Using Avalanche Passport')
 elif sybilDefense == 'true':
-    st.write('Using Passport Stamps')
+    st.header('Cluster Match Results Using Passport Stamps')
     score_at_50_percent = 15
     score_at_100_percent = 25
     scores = utils.load_stamp_scores(unique_voters)
 else:
-    st.write('Using Passport Model Based Detection System')
+    st.header('Cluster Match Results Using Passport Model Based Detection System')
     score_at_50_percent = 1
     score_at_100_percent = 25
     scores = utils.load_passport_model_scores(unique_voters)
@@ -106,23 +107,132 @@ col1.write(f"Matching Cap: {matching_cap_amount:.2f}%")
 col1.write(f"Gitcoin Passport Used: {sybilDefense.capitalize()}")
 total_voters = df['voter'].nunique()
 col1.write(f"Number of Unique Voters: {total_voters}")
-col1.write(f"Users With Passport: {len(scores)} ({len(scores)/total_voters*100:.2f}%)")
-col1.write(f"Users With Passing Passport: {len(scores[scores['rawScore'] >= score_at_50_percent])} ({len(scores[scores['rawScore'] >= score_at_50_percent])/total_voters*100:.2f}%)")
 col2.write(f"Matching Available: {matching_funds_available:.2f}")
 col2.write(f"Matching Token:  {matching_token_symbol}")
 col2.write(f"Matching Token Price: ${matching_token_price:.2f}")
 col2.write(f"Minimum Donation Threshold Amount: ${min_donation_threshold_amount:.2f}")
-col2.write(f"Number of Unique Projects: {df['project_name'].nunique()}")
+col1.write(f"Number of Unique Projects: {df['project_name'].nunique()}")
+col2.write(f"Amount Raised by Crowd: ${df['amountUSD'].sum():.2f}")
 
 if min_donation_threshold_amount == 1.0:
     min_donation_threshold_amount = 0.99
 
-df = pd.merge(df, scores[['address', 'rawScore']], left_on='voter', right_on='address', how='left')
-#turn_off_passport = st.sidebar.checkbox('Turn off passport', value=False)
-#if turn_off_passport:
-#    st.write('Passport is turned off')
-#    score_at_50_percent = 0
-#    score_at_100_percent = 0
+df = pd.merge(df, scores[['address', 'rawScore', 'CivicUniquenessPass', 'HolonymGovIdProvider']], left_on='voter', right_on='address', how='left')
+turn_off_passport = st.sidebar.checkbox('Turn off passport', value=False)
+if turn_off_passport:
+    st.write('Passport is turned off')
+    score_at_50_percent = 0
+    score_at_100_percent = 0
+
+
+## FOR AVALANCHE:
+# Add Donations by Passport Category
+# Make it easy to compare passport to no passport 
+# 
+
+st.header('🛂 Passport Usage')
+
+
+# Count of distinct addresses for each rawScore
+# Count of distinct addresses for each category
+
+
+#
+# GRAPH BELOW 
+civic_only = df[(df['CivicUniquenessPass'] > 0) & (df['HolonymGovIdProvider'] == 0)]
+holonym_only = df[(df['CivicUniquenessPass'] == 0) & (df['HolonymGovIdProvider'] > 0)]
+both = df[(df['CivicUniquenessPass'] > 0) & (df['HolonymGovIdProvider'] > 0)]
+neither = df[(df['CivicUniquenessPass'] == 0) & (df['HolonymGovIdProvider'] == 0)]
+
+# Create a DataFrame
+score_counts = pd.DataFrame({
+    'Category': ['Civic Verified', 'Holonym Verified', 'Both', 'Unverified'],
+    'Users': [civic_only['voter'].nunique(), holonym_only['voter'].nunique(), both['voter'].nunique(), neither['voter'].nunique()],
+    'Crowdfunding': [civic_only['amountUSD'].sum(), holonym_only['amountUSD'].sum(), both['amountUSD'].sum(), neither['amountUSD'].sum()]
+})
+
+total_users = score_counts['Users'].sum()
+total_crowdfunding = score_counts['Crowdfunding'].sum()
+
+score_counts['Pct of Users'] = ((score_counts['Users'] / total_users) * 100).map("{:.2f}".format)
+score_counts['Pct of Crowdfunding'] = ((score_counts['Crowdfunding'] / total_crowdfunding) * 100).map("{:.2f}".format)
+
+
+verified_users = score_counts.loc[score_counts['Category'] != 'Unverified', 'Users'].sum()
+verified_funding = score_counts.loc[score_counts['Category'] != 'Unverified', 'Crowdfunding'].sum()
+unverified_users = score_counts.loc[score_counts['Category'] == 'Unverified', 'Users'].sum()
+unverified_funding = score_counts.loc[score_counts['Category'] == 'Unverified', 'Crowdfunding'].sum()
+
+combined_data = pd.DataFrame({
+    'Category': ['Verified', 'Unverified'],
+    'Users': [verified_users, unverified_users],
+    'Crowdfunding': [verified_funding, unverified_funding]
+})
+
+# Calculate percentages
+combined_data['Percentage Of Users'] = (combined_data['Users'] / total_users) * 100
+combined_data['Percentage Of Crowdfunding'] = (combined_data['Crowdfunding'] / total_crowdfunding) * 100
+
+
+
+# Create the plot
+fig = go.Figure()
+
+fig.add_trace(
+    go.Bar(
+        x=combined_data['Percentage Of Crowdfunding'],
+        y=combined_data['Category'],
+        orientation='h',
+        name='Percentage Of Crowdfunding',
+        text=combined_data['Percentage Of Crowdfunding'].apply(lambda x: f"{x:.1f}%"),
+        textposition='auto',
+        hovertemplate='<b>%{y}</b><br>Percentage Of Crowdfunding: %{x:.1f}%<br>Crowdfunding: $%{customdata:,.0f}<extra></extra>',
+        customdata=combined_data['Crowdfunding']
+    )
+)
+
+fig.add_trace(
+    go.Bar(
+        x=combined_data['Percentage Of Users'],
+        y=combined_data['Category'],
+        orientation='h',
+        name='Percentage Of Users',
+        text=combined_data['Percentage Of Users'].apply(lambda x: f"{x:.1f}%"),
+        textposition='auto',
+        hovertemplate='<b>%{y}</b><br>Percentage Of Users: %{x:.1f}%<br>Users: %{customdata:,}<extra></extra>',
+        customdata=combined_data['Users']
+    )
+)
+
+fig.update_layout(
+    title_text='1/3 of Donors Verify with Passport but Drive Nearly Half of All Donations',
+    title_font=dict(size=24),
+    xaxis=dict(
+        title='Percentage',
+        titlefont=dict(size=18),
+        tickfont=dict(size=14),
+    ),
+    yaxis=dict(
+        title='Category',
+        titlefont=dict(size=18),
+        tickfont=dict(size=14),
+    ),
+    barmode='group',
+    legend=dict(
+        traceorder='reversed'
+    ),
+    hoverlabel=dict(
+        bgcolor="white",
+        font_size=16,
+        font_family="Rockwell"
+    )
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+score_counts['Crowdfunding'] = score_counts['Crowdfunding'] .map("{:.2f}".format)
+st.write(score_counts)
+
 
 df = fundingutils.apply_voting_eligibility(df, min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
 #st.write(df)
@@ -145,6 +255,7 @@ matching_dfs = [get_matching(strategy, votes_df, matching_amount) for strategy i
 matching_df = matching_dfs[0]
 for df in matching_dfs[1:]:
     matching_df = pd.merge(matching_df, df, on='Project', how='outer')
+
 
 
 st.header('💚 Quadratic Funding Results Comparison')
@@ -170,6 +281,57 @@ for column in matching_df.columns:
 
 st.dataframe(matching_df, use_container_width=True)
 st.markdown('Matching Values shown above are in **' + matching_token_symbol + '**')
+
+import plotly.graph_objects as go
+
+# Prepare data
+slopegraph_df = matching_df[['Project', 'QF Match', 'COCM Match']].melt('Project', var_name='Strategy', value_name='Match')
+
+# Create figure
+fig = go.Figure()
+
+# Calculate slopes for each project
+slopegraph_df['Slope'] = slopegraph_df.groupby('Project')['Match'].transform(lambda x: x.diff().iloc[-1])
+
+# Get top 5 projects with biggest positive and negative slopes
+top_positive_slopes = slopegraph_df.sort_values('Slope', ascending=False)['Project'].unique()[:5]
+top_negative_slopes = slopegraph_df.sort_values('Slope')['Project'].unique()[:5]
+
+# Define color schemes for positive and negative slopes
+color_positive = ['green', 'lime', 'forestgreen', 'darkgreen', 'lightgreen']
+color_negative = ['orange', 'darkorange', 'coral', 'orangered', 'lightsalmon']
+
+# Add traces for each project with positive slope
+for i, project in enumerate(top_positive_slopes):
+    project_data = slopegraph_df[slopegraph_df['Project'] == project]
+    fig.add_trace(go.Scatter(x=project_data['Strategy'], y=project_data['Match'], mode='lines+markers', name=project, line=dict(color=color_positive[i])))
+
+# Add traces for each project with negative slope
+for i, project in enumerate(top_negative_slopes):
+    project_data = slopegraph_df[slopegraph_df['Project'] == project]
+    fig.add_trace(go.Scatter(x=project_data['Strategy'], y=project_data['Match'], mode='lines+markers', name=project, line=dict(color=color_negative[i])))
+# Set labels and title
+fig.update_layout(
+    title={
+        'text': 'Top 10 Project Matching Differences',
+        'y':0.9,
+        'x':0.5,
+        'xanchor': 'center',
+        'yanchor': 'top'},
+    xaxis_title='Strategy',
+    yaxis_title='Match',
+    font=dict(
+        family="Courier New, monospace",
+        size=22,
+        color="RebeccaPurple"
+    )
+)
+fig.update_layout(yaxis=dict( automargin=True))
+
+
+# Show plot
+st.plotly_chart(fig)
+
 output_df = matching_df[['Project', 'COCM Match']]
 
 
