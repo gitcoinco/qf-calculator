@@ -132,7 +132,6 @@ if turn_off_passport:
 
 st.header('🛂 Passport Usage')
 
-
 # Count of distinct addresses for each rawScore
 # Count of distinct addresses for each category
 
@@ -207,6 +206,7 @@ fig.add_trace(
 fig.update_layout(
     title_text='1/3 of Donors Verify with Passport but Drive Nearly Half of All Donations',
     title_font=dict(size=24),
+    bargap=0.3,
     xaxis=dict(
         title='Percentage',
         titlefont=dict(size=18),
@@ -234,6 +234,44 @@ score_counts['Crowdfunding'] = score_counts['Crowdfunding'] .map("{:.2f}".format
 st.write(score_counts)
 
 
+st.header('👥 Donor Distribution')
+
+# Group df by voter and calculate statistics
+grouped_voter_data = df.groupby('voter')['amountUSD'].sum().reset_index()
+
+
+avg_donation = grouped_voter_data['amountUSD'].mean()
+median_donation = grouped_voter_data['amountUSD'].median()
+max_donation = grouped_voter_data['amountUSD'].max()
+
+# Display the statistics
+col1, col2, col3 = st.columns(3)
+col1.metric(label="Median Donor Contribution", value=f"${median_donation:.2f}")
+col2.metric(label="Average Donor Contribution", value=f"${avg_donation:.2f}")
+col3.metric(label="Max Donor Contribution", value=f"${max_donation:.2f}")
+
+
+# Define the bin edges with smaller intervals for lower amounts
+bin_edges = [0, 1, 2, 3, 4, 5, 10, 20, 30, 50, 100, 500, 1000, np.inf]
+bin_labels = ['0-1','1-2','2-3','3-4', '4-5', '5-10', '10-20','20-30','30-50', '50-100', '100-500', '500-1000', '1000+']
+
+# Assign each donation amount to a bin
+grouped_voter_data['amountUSD_bin'] = pd.cut(grouped_voter_data['amountUSD'], bins=bin_edges, labels=bin_labels, right=False)
+
+# Create a distribution chart of the grouped_voter_data with custom bins
+fig = px.histogram(grouped_voter_data, x="amountUSD_bin", category_orders={'amountUSD_bin': bin_labels},
+                   labels={'amountUSD_bin': 'Donation Amount Range (USD)'}, nbins=len(bin_edges)-1)
+
+fig.update_layout(
+    title_text='Donor Distribution',
+    xaxis=dict(title='Donation Amount Range (USD)', titlefont=dict(size=18), tickfont=dict(size=14)),
+    yaxis=dict(title='Count', titlefont=dict(size=18), tickfont=dict(size=14)),
+    bargap=0.4  # add space between bars
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+
 df = fundingutils.apply_voting_eligibility(df, min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
 #st.write(df)
 votes_df = fundingutils.pivot_votes(df)
@@ -255,6 +293,8 @@ matching_dfs = [get_matching(strategy, votes_df, matching_amount) for strategy i
 matching_df = matching_dfs[0]
 for df in matching_dfs[1:]:
     matching_df = pd.merge(matching_df, df, on='Project', how='outer')
+
+
 
 
 
@@ -281,8 +321,6 @@ for column in matching_df.columns:
 
 st.dataframe(matching_df, use_container_width=True)
 st.markdown('Matching Values shown above are in **' + matching_token_symbol + '**')
-
-import plotly.graph_objects as go
 
 # Prepare data
 slopegraph_df = matching_df[['Project', 'QF Match', 'COCM Match']].melt('Project', var_name='Strategy', value_name='Match')
@@ -330,7 +368,7 @@ fig.update_layout(yaxis=dict( automargin=True))
 
 
 # Show plot
-st.plotly_chart(fig)
+st.plotly_chart(fig, use_container_width=True)
 
 output_df = matching_df[['Project', 'COCM Match']]
 
