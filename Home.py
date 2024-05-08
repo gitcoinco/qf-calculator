@@ -36,6 +36,9 @@ if 'chain_id' not in st.session_state:
 round_id = '4'
 chain_id = 43114
 
+st.image("Avalanche_Horizontal_Red.png", width=400)
+
+
 rounds = utils.get_round_summary()
 
 rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)]
@@ -49,7 +52,7 @@ sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else
 token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
 chain = blockchain_mapping.get(rounds['chain_id'].values[0] if 'chain_id' in rounds else 1)
 
-st.title(f'{round_name}')
+st.title('Community Grants Funding Round One')
 
 #st.write(rounds)
 
@@ -68,7 +71,7 @@ if chain_id == 43114:
     scores = utils.load_avax_scores(unique_voters)
     score_at_50_percent = 25
     score_at_100_percent = 25
-    st.header('Cluster Match Results Using Avalanche Passport')
+    #st.subheader('Cluster Match Results Using Avalanche Passport')
 elif sybilDefense == 'true':
     st.header('Cluster Match Results Using Passport Stamps')
     score_at_50_percent = 15
@@ -298,6 +301,8 @@ st.write('''Quadratic funding helps us solve coordination failures by creating a
 
 Collusion-oriented cluster-matching (COCM) doesn’t make this assumption. Instead, it quantifies just how coordinated groups of actors are likely to be based on the social signals they have in common. Projects backed by more independent agents receive greater matching funds. Conversely, if a project’s support network shows higher levels of coordination, the matching funds are reduced, encouraging self-organized solutions within more coordinated groups.
 
+         
+You may choose to use this more advanced version of QF in your round.
 ''')
 
 
