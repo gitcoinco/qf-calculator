@@ -8,7 +8,7 @@ import fundingutils
 
 
 st.set_page_config(
-    page_title="Cluster Match Results",
+    page_title="Avalanche QF Round Results",
     page_icon="📊",
     layout="wide",
 )
@@ -31,20 +31,13 @@ if 'round_id' not in st.session_state:
 if 'chain_id' not in st.session_state:
     st.session_state.chain_id = None
     
-# Grab round_id from URL
-query_params_round_id = st.query_params.get_all('round_id')
-if len(query_params_round_id) == 1 and not st.session_state.round_id:
-    st.session_state.round_id = query_params_round_id[0]
 
-query_params_chain_id = st.query_params.get_all('chain_id')
-if len(query_params_chain_id) == 1 and not st.session_state.chain_id:
-    st.session_state.chain_id = query_params_chain_id[0]
     
-round_id = st.session_state.round_id.lower()
-chain_id = int(st.session_state.chain_id)
+round_id = '4'
+chain_id = 43114
 
 rounds = utils.get_round_summary()
-#st.write(rounds)
+
 rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)]
 
 
@@ -112,7 +105,7 @@ col2.write(f"Matching Token:  {matching_token_symbol}")
 col2.write(f"Matching Token Price: ${matching_token_price:.2f}")
 col2.write(f"Minimum Donation Threshold Amount: ${min_donation_threshold_amount:.2f}")
 col1.write(f"Number of Unique Projects: {df['project_name'].nunique()}")
-col2.write(f"Amount Raised by Crowd: ${df['amountUSD'].sum():.2f}")
+
 
 if min_donation_threshold_amount == 1.0:
     min_donation_threshold_amount = 0.99
@@ -234,8 +227,13 @@ score_counts['Crowdfunding'] = score_counts['Crowdfunding'] .map("{:.2f}".format
 st.write(score_counts)
 
 
-st.header('👥 Donor Distribution')
-
+st.header('👥 Crowdfunding')
+st.subheader(f"Amount Raised by Crowd: ${'{:,.2f}'.format(df['amountUSD'].sum())}")
+matching_amount_display = matching_token_price * matching_amount
+crowd_raised = df['amountUSD'].sum()
+boost_percentage = (crowd_raised / matching_amount_display) * 100
+st.subheader(f"This represents a  {boost_percentage:.2f}% increase in project funding")
+st.write('')
 # Group df by voter and calculate statistics
 grouped_voter_data = df.groupby('voter')['amountUSD'].sum().reset_index()
 
@@ -295,9 +293,6 @@ for df in matching_dfs[1:]:
     matching_df = pd.merge(matching_df, df, on='Project', how='outer')
 
 
-
-
-
 st.header('💚 Quadratic Funding Results Comparison')
 st.write('''Quadratic funding helps us solve coordination failures by creating a way for community members to fund what matters to them while amplifying their impact. However, it's assumption that people make independent decisions can be exploited to unfairly influence the distribution of matching funds.
 
@@ -319,8 +314,43 @@ for column in matching_df.columns:
     if column != 'Project':
         matching_df[column] = matching_df[column].apply(lambda x: round(x, 2))
 
+# Prepare data for the area line chart
+# Sort each strategy by match amount and reset index
+sorted_COCM = matching_df['COCM Match'].sort_values().reset_index(drop=True)
+sorted_QF = matching_df['QF Match'].sort_values().reset_index(drop=True)
+
+# Combine sorted strategies into a DataFrame and reset index
+area_chart_df = pd.DataFrame({'COCM Match': sorted_COCM, 'QF Match': sorted_QF}).reset_index()
+
+# Rename the index column
+area_chart_df.rename(columns={'index': 'Project Index'}, inplace=True)
+
+# Melt the dataframe to long format
+area_chart_df = area_chart_df.melt(id_vars='Project Index', var_name='Strategy', value_name='Match')
+
+# Create the area line chart with overlapping areas
+fig = go.Figure()
+for strategy in area_chart_df['Strategy'].unique():
+    fig.add_trace(go.Scatter(
+        x=area_chart_df[area_chart_df['Strategy'] == strategy]['Project Index'], 
+        y=area_chart_df[area_chart_df['Strategy'] == strategy]['Match'],
+        mode='lines',
+        name=strategy,
+        fill='tonexty'
+    ))
+fig.update_layout(
+    title="COCM tends to distribute more funding to the long tail of projects than QF",
+    xaxis_title="",
+    yaxis_title="Match Amount"
+)
+# Show the plot
+st.plotly_chart(fig, use_container_width=True)
+
 st.dataframe(matching_df, use_container_width=True)
 st.markdown('Matching Values shown above are in **' + matching_token_symbol + '**')
+
+
+
 
 # Prepare data
 slopegraph_df = matching_df[['Project', 'QF Match', 'COCM Match']].melt('Project', var_name='Strategy', value_name='Match')
