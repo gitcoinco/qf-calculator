@@ -52,11 +52,12 @@ round_name = rounds['round_name'].values[0]
 matching_cap_amount = rounds['matching_cap_amount'].astype(float).values[0] if 'matching_cap_amount' in rounds and not pd.isnull(rounds['matching_cap_amount'].values[0]) else 100.0
 matching_funds_available = rounds['matching_funds_available'].astype(float).values[0] if 'matching_funds_available' in rounds else 0
 min_donation_threshold_amount = rounds['min_donation_threshold_amount'].astype(float).values[0] if 'min_donation_threshold_amount' in rounds and not pd.isnull(rounds['min_donation_threshold_amount'].values[0]) else 0.0
-sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else False
+sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds and rounds['sybilDefense'].values[0] is not None else 'false'
 token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
 chain = blockchain_mapping.get(rounds['chain_id'].values[0] if 'chain_id' in rounds else 1)
 
-st.title(f'{round_name} Cluster Match Results')
+st.title(f'{round_name}')
+st.header('Cluster Match Results')
 
 #st.write(rounds)
 
