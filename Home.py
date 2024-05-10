@@ -9,7 +9,7 @@ import fundingutils
 
 st.set_page_config(
     page_title="Cluster Match Results",
-    page_icon="📊",
+    page_icon="favicon.png",
     layout="wide",
 )
 
@@ -42,6 +42,8 @@ if len(query_params_chain_id) == 1 and not st.session_state.chain_id:
     
 round_id = st.session_state.round_id.lower()
 chain_id = int(st.session_state.chain_id)
+
+st.image('657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width = 300)
 
 rounds = utils.get_round_summary()
 #st.write(rounds)
@@ -118,6 +120,7 @@ if min_donation_threshold_amount == 1.0:
     min_donation_threshold_amount = 0.99
 
 df = pd.merge(df, scores[['address', 'rawScore']], left_on='voter', right_on='address', how='left')
+
 #turn_off_passport = st.sidebar.checkbox('Turn off passport', value=False)
 #if turn_off_passport:
 #    st.write('Passport is turned off')
@@ -134,8 +137,6 @@ def get_matching(strategy, votes_df, matching_amount):
     return df
 
 strategies = ['COCM',  'QF']#, 'donation_profile_clustermatch', 'pairwise']  # Add or remove strategies as needed
-
-votes_df = fundingutils.pivot_votes(df)
 voter_data = df.groupby('voter').agg({'project_name': 'nunique', 'amountUSD': 'sum'}).reset_index()
 voter_data.columns = ['Voter', 'Number of Projects Picked', 'Sum of USD Picked']
 
