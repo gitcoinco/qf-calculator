@@ -123,15 +123,17 @@ def load_passport_model_scores(addresses):
     scores = scores.join(pd.json_normalize(scores['data'])).drop('data', axis=1)
     scores['address'] = scores['address'].str.lower()
     scores = scores[scores['address'].isin(addresses)]
-    scores = scores.sort_values('updated_at', ascending=False).drop_duplicates('address')
     scores['score'] = scores['score'].astype(float)
     scores['rawScore'] = scores['score']
 
     df = pd.read_csv('data/gg20_missing_addresses_scores.csv')
     df.rename(columns={'scores': 'rawScore'}, inplace=True)
     df = df[df['address'].isin(addresses)]
-    scores = scores[['address', 'rawScore']]
+    df['updated_at'] = pd.Timestamp('2023-05-09 23:59:00', tz='UTC')
+    scores['updated_at'] = pd.to_datetime(scores['updated_at'], utc=True)
+    scores = scores[['address', 'rawScore', 'updated_at']]
     df = pd.concat([df, scores], ignore_index=True)
+    df = df.sort_values('updated_at', ascending=False).drop_duplicates('address')
 
     return df
 
