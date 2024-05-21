@@ -211,29 +211,18 @@ def donation_profile_clustermatch(donation_df):
 
   return clustermatch(donation_df, don_profile_df)
 
-def COCM(donation_df, cluster_df, fancy=True):
+def COCM(donation_df, cluster_df, calcstyle='markov', harsh=True):
   # run CO-CM on a set of funding amounts and clusters
-  # if "fancy" is false, follow the formula in the whitepaper exactly. If "fancy" is true, get fancy with it.
+  # calcstyle is a variable signifying how to compute similarity scores between users and projects
+  # harsh is a boolean determining how we should scale contributions, given similarity scores
 
-  # # first, drop users who haven't made any donations / aren't in any clusters
-  # cluster_df.drop(cluster_df.index[cluster_df.apply(lambda row: all(row == 0), axis=1)],inplace=True)
-  # donation_df.drop(donation_df.index[donation_df.apply(lambda row: all(row == 0), axis=1)],inplace=True)
-
-  # # Also remove wallets that are just in one dataframe, but not the other
-  # cluster_df.drop(set(cluster_df.index) - set(donation_df.index), inplace=True)
-  # donation_df.drop(set(donation_df.index) - set(cluster_df.index), inplace=True)
-
-  # #make sure the indices are sorted the same way (important for making sure the matrix multiplications work later)
-  # cluster_df.sort_index(inplace=True)
-  # donation_df.sort_index(inplace=True)
-
+  # first, clean up the dataframes (see the align function definition for details)
   donation_df, cluster_df = align(donation_df, cluster_df)
 
   projects = donation_df.columns
   clusters = cluster_df.columns
   donors = donation_df.index
   cluster_members = cluster_df.index
-
 
   # normalize the cluster dataframe so that rows sum to 1. Now, an entry tells us the "weight" that a particular cluster has for a particular user.
   # if a user is in 0 clusters, their row will be a bunch of NaNs if we naively divide by 1.
@@ -242,7 +231,14 @@ def COCM(donation_df, cluster_df, fancy=True):
 
   binarized_clusters = binarize(cluster_df)
 
-  if fancy:
+  assert calcstyle in ['markov', 'og', 'pct_friends']
+  if calcstyle == 'markov':
+    normalized_users = cluster_df.transpose().apply(lambda row: row / row.sum() if any(row) else 0, axis=1)
+    PJP = normalized_users.dot(normalized_clusters)
+    k_indicators = normalized_clusters.dot(PJP)
+    k_indicators = k_indicators.apply(lambda row: np.maximum(row, binarized_clusters.loc[row.name]), axis=1)
+
+  if calcstyle == 'pct_friends':
     # friendship_matrix is a matrix whose rows and columns are both wallets,
     # and a value of 1 at index i,j means that wallets i and j are in at least one cluster together.
     friendship_matrix = cluster_df.dot(cluster_df.transpose()).apply(lambda col: col > 0)
@@ -255,9 +251,8 @@ def COCM(donation_df, cluster_df, fancy=True):
     k_indicators = friendship_matrix.dot(binarized_clusters).apply(lambda row: row / friendship_matrix.loc[row.name].sum(), axis=1)
     # ... and the following line used cluster_df instead of binarized_clusters
     k_indicators = k_indicators.apply(lambda row: np.maximum(row, binarized_clusters.loc[row.name]), axis=1)
-
-  else:
-
+  
+  if calcstyle == 'og':
     # friendship_matrix is a matrix whose rows and columns are both wallets,
     # and a value greater than 0 at index i,j means that wallets i and j are in at least one group together.
     friendship_matrix = cluster_df.dot(cluster_df.transpose())
@@ -267,9 +262,6 @@ def COCM(donation_df, cluster_df, fancy=True):
     k_indicators = friendship_matrix.dot(cluster_df).apply(lambda col: col > 0)
 
   # Create a dictionary to store funding amounts for each project.
-  # first we'll fund each project with the sum of donations to that project
-  # then we'll add in the pairwise matching amounts, which is the hard part.
-  #funding = {p: donation_df[p].sum() for p in projects}
   funding = {p: 0 for p in projects}
 
   for p in projects:
@@ -284,6 +276,8 @@ def COCM(donation_df, cluster_df, fancy=True):
     # now, K is a matrix where rows are wallets, columns are projects, and entry i,g ranges between c_i and sqrt(c_i) depending on i's relationship with cluster g and whether "fancy" was set to true or not.
     K = (k_indicators * C.pow(1/2)) + ((1 - k_indicators) * C)
 
+    if harsh == True:
+      K = (1 - k_indicators) * C
 
     # Now we have all the k values, which are one of the items inside the innermost sum expressed in COCM.
     # the other component of these sums is a division of each k value by the number of groups that user is in.
@@ -345,8 +339,12 @@ def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cl
         funding = donation_profile_clustermatch(donation_df)
     elif algo == 'pairwise':
         funding = pairwise(donation_df)
-    elif algo == 'COCM':
+    elif algo == 'COCM': #markov
         funding = COCM(donation_df, cluster_df)
+    elif algo == 'COCM og':
+        funding = COCM(donation_df, cluster_df, calcstyle='og')
+    elif algo == 'COCM pct_friends':
+        funding = COCM(donation_df, cluster_df, calcstyle='pct_friends')
     else:
         funding = standard_qf(donation_df)
     total_money = sum(funding.values())

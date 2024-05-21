@@ -15,11 +15,11 @@ import time
 def run_query(query):
     """Run query and return results"""
     try:
-        conn = pg.connect(host=st.secrets["database"]["host"], 
-                           port=st.secrets["database"]["port"], 
-                           dbname=st.secrets["database"]["dbname"], 
-                           user=st.secrets["database"]["user"], 
-                           password=st.secrets["database"]["password"])
+        conn = pg.connect(host=st.secrets["indexer"]["host"], 
+                           port=st.secrets["indexer"]["port"], 
+                           dbname=st.secrets["indexer"]["dbname"], 
+                           user=st.secrets["indexer"]["user"], 
+                           password=st.secrets["indexer"]["password"])
         cur = conn.cursor()
         cur.execute(query)
         col_names = [desc[0] for desc in cur.description]
@@ -32,12 +32,28 @@ def run_query(query):
 
 @st.cache_resource(ttl=36000)
 def run_query_with_params(query, params):
-    conn = pg.connect(host=st.secrets["database"]["host"], 
-                           port=st.secrets["database"]["port"], 
-                           dbname=st.secrets["database"]["dbname"], 
-                           user=st.secrets["database"]["user"], 
-                           password=st.secrets["database"]["password"])
+    conn = pg.connect(host=st.secrets["indexer"]["host"], 
+                           port=st.secrets["indexer"]["port"], 
+                           dbname=st.secrets["indexer"]["dbname"], 
+                           user=st.secrets["indexer"]["user"], 
+                           password=st.secrets["indexer"]["password"])
     cur = conn.cursor()
+    cur.execute(query, params)
+    col_names = [desc[0] for desc in cur.description]
+    results = pd.DataFrame(cur.fetchall(), columns=col_names)
+    cur.close()
+    conn.close()
+    return results
+
+def run_grants_query_with_params(query, params):
+    conn = pg.connect(     host=st.secrets["grants"]["host"], 
+                           port=st.secrets["grants"]["port"], 
+                           dbname=st.secrets["grants"]["dbname"], 
+                           user=st.secrets["grants"]["user"], 
+                           password=st.secrets["grants"]["password"]
+                           )
+    cur = conn.cursor()
+    #st.write(f"Executing query: {cur.mogrify(query, params).decode()}")  # Print the query with parameters inserted
     cur.execute(query, params)
     col_names = [desc[0] for desc in cur.description]
     results = pd.DataFrame(cur.fetchall(), columns=col_names)
@@ -107,10 +123,19 @@ def load_passport_model_scores(addresses):
     scores = scores.join(pd.json_normalize(scores['data'])).drop('data', axis=1)
     scores['address'] = scores['address'].str.lower()
     scores = scores[scores['address'].isin(addresses)]
-    scores = scores.sort_values('updated_at', ascending=False).drop_duplicates('address')
     scores['score'] = scores['score'].astype(float)
     scores['rawScore'] = scores['score']
-    return scores
+
+    df = pd.read_csv('data/gg20_missing_addresses_scores.csv')
+    df.rename(columns={'scores': 'rawScore'}, inplace=True)
+    df = df[df['address'].isin(addresses)]
+    df['updated_at'] = pd.Timestamp('2023-05-09 23:59:00', tz='UTC')
+    scores['updated_at'] = pd.to_datetime(scores['updated_at'], utc=True)
+    scores = scores[['address', 'rawScore', 'updated_at']]
+    df = pd.concat([df, scores], ignore_index=True)
+    df = df.sort_values('updated_at', ascending=False).drop_duplicates('address')
+
+    return df
 
 def load_avax_scores(addresses):
     url = 'https://public.scorer.gitcoin.co/passport_scores/6608/registry_score.jsonl'
@@ -128,15 +153,15 @@ def load_avax_scores(addresses):
     return scores
 
 def load_stamp_scores(addresses):
-    url = 'https://public.scorer.gitcoin.co/passport_scores/335/registry_score.jsonl'
-    scores = load_data_from_url(url)
-    scores = pd.DataFrame(scores)
-    scores = scores.join(pd.json_normalize(scores['passport'])).drop('passport', axis=1)
-    scores = scores.join(pd.json_normalize(scores['evidence'])).drop('evidence', axis=1)
-    scores = scores[scores['address'].isin(addresses)]
-    scores['score'] = scores['score'].astype(float)
-    scores['rawScore'] = scores['rawScore'].astype(float)
-    return scores
+    addresses = tuple(addresses)
+    sql_query_file = 'queries/get_passport_stamps.sql'
+    with open(sql_query_file, 'r') as file:
+        query = file.read()
+    params = {
+        'addresses': addresses
+    }
+    results = run_grants_query_with_params(query, params)  
+    return results
 
 def parse_config_file(file_content):
     data = []
