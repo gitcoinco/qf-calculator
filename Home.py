@@ -343,7 +343,15 @@ output_df['matchedUSD'] = (output_df['matched'] * matching_token_price).round(2)
 output_df['matched'] = output_df['matched'] * 10**matching_token_decimals
 output_df['totalReceived'] = output_df['totalReceived'] * (1e18) # come back and put in round token
 
-st.header('Total Matched Funds: ' + '{:.0f}'.format(output_df['matched'].sum()))
+all_matching_funds_available = np.isclose(
+    (matching_funds_available) * 10**matching_token_decimals,
+    output_df['matched'].astype(float).sum(),
+    rtol=10**(-float(matching_token_decimals)))
+if not all_matching_funds_available:
+    st.warning('The total matched funds exceed the available matching funds. Please talk to @umarkhaneth on telegram')
+    st.warning('Matching funds available: ' + '{:.0f}'.format(matching_funds_available * 10**matching_token_decimals))
+    st.warning('Total matched funds: ' + '{:.0f}'.format(output_df['matched'].sum()))
+    st.warning('Difference: ' + '{:.0f}'.format((output_df['matched'].sum() - matching_funds_available * 10**matching_token_decimals)))
 
 # Add additional columns
 output_df['matched'] = output_df['matched'].apply(lambda x: '{:.0f}'.format(x) if pd.notnull(x) else x)   

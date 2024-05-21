@@ -340,7 +340,7 @@ def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cl
     elif algo == 'pairwise':
         funding = pairwise(donation_df)
     elif algo == 'COCM': #markov
-        funding = COCM(donation_df, cluster_df)
+        funding = COCM(donation_df, cluster_df, calcstyle='markov')
     elif algo == 'COCM og':
         funding = COCM(donation_df, cluster_df, calcstyle='og')
     elif algo == 'COCM pct_friends':
