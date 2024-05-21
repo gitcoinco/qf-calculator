@@ -106,11 +106,10 @@ st.header('⚙️ Round Settings')
 col1, col2 = st.columns(2)
 col1.write(f"Chain: {chain}")
 col1.write(f"Matching Cap: {matching_cap_amount:.2f}%")
-col1.write(f"Gitcoin Passport Used: {sybilDefense.capitalize()}")
+col1.write(f"Sybil Defense Selected: {sybilDefense.capitalize()}")
 total_voters = df['voter'].nunique()
 col1.write(f"Number of Unique Voters: {total_voters}")
-col2.write(f"Matching Available: {matching_funds_available:.2f}")
-col2.write(f"Matching Token:  {matching_token_symbol}")
+col2.write(f"Matching Available: {matching_funds_available:.2f}  {matching_token_symbol}")
 col2.write(f"Matching Token Price: ${matching_token_price:.2f}")
 col2.write(f"Minimum Donation Threshold Amount: ${min_donation_threshold_amount:.2f}")
 col2.write(f"Number of Unique Projects: {df['project_name'].nunique()}")
@@ -247,11 +246,14 @@ grouped_voter_data['amountUSD_bin'] = pd.cut(grouped_voter_data['amountUSD'], bi
 fig = px.histogram(grouped_voter_data, x="amountUSD_bin", category_orders={'amountUSD_bin': bin_labels},
                    labels={'amountUSD_bin': 'Donation Amount Range (USD)'}, nbins=len(bin_edges)-1)
 
+# Update hover text to be more descriptive
+fig.update_traces(hovertemplate='<b>Donation Range:</b> $%{x}<br><b>Number of Donors:</b> %{y}')
+
 fig.update_layout(
     title_text='Distribution of Donor Contributions by Amount',
     xaxis=dict(title='Donation Amount Range (USD)', titlefont=dict(size=18), tickfont=dict(size=14)),
     yaxis=dict(title='Number of Donors', titlefont=dict(size=18), tickfont=dict(size=14)),
-    bargap=0.4  # add space between bars
+    bargap=0.3  # add space between bars
 )
 
 st.plotly_chart(fig, use_container_width=True)
@@ -264,28 +266,37 @@ Connection-oriented cluster-matching (COCM) doesn’t make this assumption. Inst
 
 ''')
 
+
+all_projects = df['project_name'].unique()
+#projects_to_remove = st.multiselect('Projects which violated rules may be removed from the matching distribution by selecting them here:', all_projects)
+#df = df[~df['project_name'].isin(projects_to_remove)]
+
+
+
+
 ##
 # Calculate matching results with passport on
 df_with_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
+st.write(df_with_passport)
 votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
 
 # Calculate matching results with passport off
-df_without_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, 0, 0)
-votes_df_without_passport = fundingutils.pivot_votes(df_without_passport)
+#df_without_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, 0, 0)
+#votes_df_without_passport = fundingutils.pivot_votes(df_without_passport)
+#suffixes = ['(Passport On)', '(Passport Off)']
 
-def get_matching(strategy, votes_df, matching_amount, suffix):
-    df = fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_amount, cluster_df=votes_df)
-    df = df.rename(columns={'project_name': 'Project', 'matching_amount': f'{strategy} Match {suffix}', 'matching_percent': f'{strategy} Match % {suffix}'})
+def get_matching(strategy, votes_df, matching_amount, suffix=None):
+    df = fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_amount,cluster_df=votes_df)
+    df = df.rename(columns={'project_name': 'Project', 'matching_amount': f'{strategy} Match', 'matching_percent': f'{strategy} Match %'})
     return df
 
 strategies = ['COCM', 'QF']
-suffixes = ['(Passport On)', '(Passport Off)']
 
 # Calculate matching results for both strategies and both scenarios
 matching_dfs = []
-for suffix, votes_df in zip(suffixes, [votes_df_with_passport, votes_df_without_passport]):
-    for strategy in strategies:
-        matching_dfs.append(get_matching(strategy, votes_df, matching_amount, suffix))
+#for suffix, votes_df in zip(suffixes, [votes_df_with_passport, votes_df_without_passport]):
+for strategy in strategies:
+    matching_dfs.append(get_matching(strategy, votes_df_with_passport, matching_amount))
 
 # Merge all matching results into a single DataFrame
 matching_df = matching_dfs[0]
@@ -299,19 +310,11 @@ matching_df = pd.merge(matching_df, df_unique, left_on='Project', right_on='proj
 matching_df['Project Page'] = 'https://explorer.gitcoin.co/#/round/' + matching_df['chain_id'].astype(str) + '/' + matching_df['round_id'].astype(str) + '/' + matching_df['application_id'].astype(str)
 
 # Sort the dataframe by 'COCM Match (Passport On)' in descending order
-matching_df = matching_df.sort_values(by='COCM Match (Passport On)', ascending=False)
+matching_df = matching_df.sort_values(by='COCM Match', ascending=False)
 
 # Configure the dataframe display
 column_config = {
     "Project": st.column_config.TextColumn("Project"),
-    "COCM Match (Passport On)": st.column_config.NumberColumn("COCM Match (Passport On)", format="%.2f"),
-    "QF Match (Passport On)": st.column_config.NumberColumn("QF Match (Passport On)", format="%.2f"),
-    "COCM Match % (Passport On)": st.column_config.NumberColumn("COCM Match % (Passport On)", format="%.2f%%"),
-    "QF Match % (Passport On)": st.column_config.NumberColumn("QF Match % (Passport On)", format="%.2f%%"),
-    "COCM Match (Passport Off)": st.column_config.NumberColumn("COCM Match (Passport Off)", format="%.2f"),
-    "QF Match (Passport Off)": st.column_config.NumberColumn("QF Match (Passport Off)", format="%.2f"),
-    "COCM Match % (Passport Off)": st.column_config.NumberColumn("COCM Match % (Passport Off)", format="%.2f%%"),
-    "QF Match % (Passport Off)": st.column_config.NumberColumn("QF Match % (Passport Off)", format="%.2f%%"),
     "Project Page": st.column_config.LinkColumn("Project Page", display_text="Visit")
 }
 
@@ -330,28 +333,26 @@ st.dataframe(
 st.markdown('Matching Values shown above are in **' + matching_token_symbol + '**')
 ##
 
-output_df = matching_df[['Project', 'COCM Match (Passport On)']]
+output_df = matching_df[['Project', 'COCM Match']]
 
 
 projects_df = utils.get_projects_in_round(round_id, chain_id)
 
 
 output_df = pd.merge(output_df, projects_df, left_on='Project', right_on='project_name', how='outer')
-output_df = output_df.rename(columns={'id': 'applicationId', 'project_id':'projectId', 'project_name': 'projectName', 'recipient_address':'payoutAddress', 'total_donations_count':'contributionsCount', 'COCM Match (Passport On)': 'matched', 'total_amount_donated_in_usd':'totalReceived'})
+output_df = output_df.rename(columns={'id': 'applicationId', 'project_id':'projectId', 'project_name': 'projectName', 'recipient_address':'payoutAddress', 'total_donations_count':'contributionsCount', 'COCM Match': 'matched', 'total_amount_donated_in_usd':'totalReceived'})
 output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddress', 'matched', 'contributionsCount', 'totalReceived']]
 output_df['matchedUSD'] = (output_df['matched'] * matching_token_price).round(2)
 output_df['matched'] = output_df['matched'] * 10**matching_token_decimals
-output_df['totalReceived'] = output_df['totalReceived'] * (1e18) # come back and put in round token
+output_df['totalReceived'] = output_df['totalReceived'] * (10**matching_token_decimals) 
 
-all_matching_funds_available = np.isclose(
-    (matching_funds_available) * 10**matching_token_decimals,
-    output_df['matched'].astype(float).sum(),
-    rtol=10**(-float(matching_token_decimals)))
+full_matching_funds_available = int(matching_funds_available * 10**matching_token_decimals)
+all_matching_funds_available = full_matching_funds_available  >= int(output_df['matched'].astype(float).sum())
 if not all_matching_funds_available:
     st.warning('The total matched funds exceed the available matching funds. Please talk to @umarkhaneth on telegram')
     st.warning('Matching funds available: ' + '{:.0f}'.format(matching_funds_available * 10**matching_token_decimals))
     st.warning('Total matched funds: ' + '{:.0f}'.format(output_df['matched'].sum()))
-    st.warning('Difference: ' + '{:.0f}'.format((output_df['matched'].sum() - matching_funds_available * 10**matching_token_decimals)))
+    st.warning('Difference: ' + str((output_df['matched'].sum() - matching_funds_available * 10**matching_token_decimals)))
 
 # Add additional columns
 output_df['matched'] = output_df['matched'].apply(lambda x: '{:.0f}'.format(x) if pd.notnull(x) else x)   

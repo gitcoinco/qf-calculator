@@ -68,17 +68,6 @@ def check_matching_cap(col, matching_cap_percent):
     # Return the updated project data
     return col
 
-def scale_matching(funding, matching_cap_percent, matching_amount):
-    projects = list(funding.keys())
-    total_money = sum(funding.values())
-    funding_normalized = {p: funding[p]/total_money for p in projects} 
-    # Create DataFrame with 'project_name' and 'matching_amount' columns
-    result = pd.DataFrame(list(funding_normalized.items()), columns=['project_name', 'matching_amount'])
-    # Apply the cap to the 'matching_amount' column
-    result['matching_amount'] = check_matching_cap(result['matching_amount'], matching_cap_percent)
-    # Scale the 'matching_amount' column by the total matching amount
-    result['matching_amount'] = result['matching_amount'] * matching_amount
-    return result
 
 # now on to the QF variants
 
@@ -335,6 +324,7 @@ def pivot_votes(round_votes):
 @st.cache_resource(ttl=36000)
 def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cluster_df = None):
     projects = donation_df.columns
+    st.write(donation_df)
     if algo == 'donation_profile_clustermatch':
         funding = donation_profile_clustermatch(donation_df)
     elif algo == 'pairwise':
@@ -352,9 +342,16 @@ def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cl
     # Create DataFrame with 'project_name' and 'matching_amount' columns
     result = pd.DataFrame(list(funding_normalized.items()), columns=['project_name', 'matching_amount'])
     # Apply the cap to the 'matching_amount' column
+    st.header(algo)
+    st.write(result)
     if matching_cap_percent < 100:
       result['matching_amount'] = check_matching_cap(result['matching_amount'], matching_cap_percent/100)
     # Scale the 'matching_amount' column by the total matching amount
     result['matching_percent'] = result['matching_amount'] * 100
     result['matching_amount'] = result['matching_amount'] * matching_amount
+    st.header(algo)
+    st.write(result)
+    #while (sum(result['matching_amount'])*1e18) > (matching_amount*1e18):
+        #st.header('not allowed bish')
+        #result['matching_amount'] = result['matching_amount'] * (matching_amount / sum(result['matching_amount']))
     return result
