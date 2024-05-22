@@ -13,6 +13,7 @@ st.set_page_config(
     layout="wide",
 )
 
+
 blockchain_mapping = {
         1: "Ethereum",
         10: "Optimism",
@@ -105,21 +106,22 @@ st.header('⚙️ Round Settings')
 col1, col2 = st.columns(2)
 col1.write(f"Chain: {chain}")
 col1.write(f"Matching Cap: {matching_cap_amount:.2f}%")
-col1.write(f"Gitcoin Passport Used: {sybilDefense.capitalize()}")
+col1.write(f"Sybil Defense Selected: {sybilDefense.capitalize()}")
 total_voters = df['voter'].nunique()
 col1.write(f"Number of Unique Voters: {total_voters}")
-col1.write(f"Users With Passport: {len(scores)} ({len(scores)/total_voters*100:.2f}%)")
-col1.write(f"Users With Passing Passport: {len(scores[scores['rawScore'] >= score_at_50_percent])} ({len(scores[scores['rawScore'] >= score_at_50_percent])/total_voters*100:.2f}%)")
-col2.write(f"Matching Available: {matching_funds_available:.2f}")
-col2.write(f"Matching Token:  {matching_token_symbol}")
+col2.write(f"Matching Available: {matching_funds_available:.2f}  {matching_token_symbol}")
 col2.write(f"Matching Token Price: ${matching_token_price:.2f}")
 col2.write(f"Minimum Donation Threshold Amount: ${min_donation_threshold_amount:.2f}")
 col2.write(f"Number of Unique Projects: {df['project_name'].nunique()}")
+
+
 
 if min_donation_threshold_amount == 1.0:
     min_donation_threshold_amount = 0.99
 
 df = pd.merge(df, scores[['address', 'rawScore']], left_on='voter', right_on='address', how='left')
+
+
 
 #turn_off_passport = st.sidebar.checkbox('Turn off passport', value=False)
 #if turn_off_passport:
@@ -127,50 +129,213 @@ df = pd.merge(df, scores[['address', 'rawScore']], left_on='voter', right_on='ad
 #    score_at_50_percent = 0
 #    score_at_100_percent = 0
 
-df = fundingutils.apply_voting_eligibility(df, min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
-#st.write(df)
-votes_df = fundingutils.pivot_votes(df)
 
-def get_matching(strategy, votes_df, matching_amount):
-    df = fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_amount, cluster_df = votes_df)
-    df = df.rename(columns={'project_name': 'Project', 'matching_amount': f'{strategy} Match', 'matching_percent': f'{strategy} Match %'})
-    return df
+st.header('🛂 Passport Usage')
+st.subheader(f" {len(scores)} Users ({len(scores)/total_voters*100:.1f}%) Have a Passport Score")
 
-strategies = ['COCM',  'QF']#, 'donation_profile_clustermatch', 'pairwise']  # Add or remove strategies as needed
-voter_data = df.groupby('voter').agg({'project_name': 'nunique', 'amountUSD': 'sum'}).reset_index()
-voter_data.columns = ['Voter', 'Number of Projects Picked', 'Sum of USD Picked']
+def calculate_verified_vs_unverified(scores, donations_df, score_threshold):
+    verified_users_count = scores[scores['rawScore'] >= score_threshold].shape[0]
+    verified_funding_total = donations_df.loc[donations_df['rawScore'] >= score_threshold, 'amountUSD'].sum()
+    unverified_users_count = scores[scores['rawScore'] < score_threshold].shape[0]
+    unverified_funding_total = donations_df.loc[donations_df['rawScore'] < score_threshold, 'amountUSD'].sum()
+
+    summary_data = pd.DataFrame({
+        'Category': ['Verified', 'Unverified'],
+        'Users': [verified_users_count, unverified_users_count],
+        'Crowdfunding': [verified_funding_total, unverified_funding_total]
+    })
+
+    # Calculate percentages
+    total_users_count = summary_data['Users'].sum()
+    total_crowdfunding_amount = summary_data['Crowdfunding'].sum()
+    summary_data['Percentage Of Users'] = (summary_data['Users'] / total_users_count) * 100
+    summary_data['Percentage Of Crowdfunding'] = (summary_data['Crowdfunding'] / total_crowdfunding_amount) * 100
+
+    # Create the plot
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Bar(
+            x=summary_data['Percentage Of Crowdfunding'],
+            y=summary_data['Category'],
+            orientation='h',
+            name='Percentage Of Crowdfunding',
+            text=summary_data['Percentage Of Crowdfunding'].apply(lambda x: f"{x:.1f}%"),
+            textposition='auto',
+            hovertemplate='<b>%{y}</b><br>Percentage Of Crowdfunding: %{x:.1f}%<br>Crowdfunding: $%{customdata:,.0f}<extra></extra>',
+            customdata=summary_data['Crowdfunding']
+        )
+    )
+
+    fig.add_trace(
+        go.Bar(
+            x=summary_data['Percentage Of Users'],
+            y=summary_data['Category'],
+            orientation='h',
+            name='Percentage Of Users',
+            text=summary_data['Percentage Of Users'].apply(lambda x: f"{x:.1f}%"),
+            textposition='auto',
+            hovertemplate='<b>%{y}</b><br>Percentage Of Users: %{x:.1f}%<br>Users: %{customdata:,}<extra></extra>',
+            customdata=summary_data['Users']
+        )
+    )
+
+    fig.update_layout(
+        title_text='Percentage of Crowdfunding and Users by Passport Status',
+        title_font=dict(size=24),
+        bargap=0.3,
+        xaxis=dict(
+            title='Percentage',
+            titlefont=dict(size=18),
+            tickfont=dict(size=14),
+        ),
+        yaxis=dict(
+            title='Category',
+            titlefont=dict(size=18),
+            tickfont=dict(size=14),
+        ),
+        barmode='group',
+        legend=dict(
+            traceorder='reversed'
+        ),
+        hoverlabel=dict(
+            bgcolor="white",
+            font_size=16,
+            font_family="Rockwell"
+        )
+    )
+
+    return fig, summary_data
+
+# Call the function
+passport_usage_fig, passport_usage_df = calculate_verified_vs_unverified(scores, df, score_at_50_percent)
+st.plotly_chart(passport_usage_fig, use_container_width=True)
+#st.write(passport_usage_df)
 
 
-matching_dfs = [get_matching(strategy, votes_df, matching_amount) for strategy in strategies]
+st.header('👥 Crowdfunding')
+st.subheader(f"${'{:,.2f}'.format(df['amountUSD'].sum())} raised by crowd")
+matching_amount_display = matching_token_price * matching_amount
+crowd_raised = df['amountUSD'].sum()
+percentage_of_matching = (crowd_raised / matching_amount_display) * 100
+st.subheader(f"{percentage_of_matching:.2f}% of the matching pool")
+st.write('')
+# Group df by voter and calculate statistics
+grouped_voter_data = df.groupby('voter')['amountUSD'].sum().reset_index()
 
-matching_df = matching_dfs[0]
-for df in matching_dfs[1:]:
-    matching_df = pd.merge(matching_df, df, on='Project', how='outer')
+
+avg_donation = grouped_voter_data['amountUSD'].mean()
+median_donation = grouped_voter_data['amountUSD'].median()
+max_donation = grouped_voter_data['amountUSD'].max()
+
+# Display the statistics
+col1, col2, col3 = st.columns(3)
+col1.metric(label="Median Donor Contribution", value=f"${median_donation:.2f}")
+col2.metric(label="Average Donor Contribution", value=f"${avg_donation:.2f}")
+col3.metric(label="Max Donor Contribution", value=f"${max_donation:.2f}")
+
+
+# Define the bin edges with smaller intervals for lower amounts
+bin_edges = [0, 1, 2, 3, 4, 5, 10, 20, 30, 50, 100, 500, 1000, np.inf]
+bin_labels = ['0-1','1-2','2-3','3-4', '4-5', '5-10', '10-20','20-30','30-50', '50-100', '100-500', '500-1000', '1000+']
+
+# Assign each donation amount to a bin
+grouped_voter_data['amountUSD_bin'] = pd.cut(grouped_voter_data['amountUSD'], bins=bin_edges, labels=bin_labels, right=False)
+
+# Create a distribution chart of the grouped_voter_data with custom bins
+fig = px.histogram(grouped_voter_data, x="amountUSD_bin", category_orders={'amountUSD_bin': bin_labels},
+                   labels={'amountUSD_bin': 'Donation Amount Range (USD)'}, nbins=len(bin_edges)-1)
+
+# Update hover text to be more descriptive
+fig.update_traces(hovertemplate='<b>Donation Range:</b> $%{x}<br><b>Number of Donors:</b> %{y}')
+
+fig.update_layout(
+    title_text='Distribution of Donor Contributions by Amount',
+    xaxis=dict(title='Donation Amount Range (USD)', titlefont=dict(size=18), tickfont=dict(size=14)),
+    yaxis=dict(title='Number of Donors', titlefont=dict(size=18), tickfont=dict(size=14)),
+    bargap=0.3  # add space between bars
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
 
 st.header('💚 Quadratic Funding Results Comparison')
 st.write('''Quadratic funding helps us solve coordination failures by creating a way for community members to fund what matters to them while amplifying their impact. However, it's assumption that people make independent decisions can be exploited to unfairly influence the distribution of matching funds.
 
-Collusion-oriented cluster-matching (COCM) doesn’t make this assumption. Instead, it quantifies just how coordinated groups of actors are likely to be based on the social signals they have in common. Projects backed by more independent agents receive greater matching funds. Conversely, if a project’s support network shows higher levels of coordination, the matching funds are reduced, encouraging self-organized solutions within more coordinated groups.
+Connection-oriented cluster-matching (COCM) doesn’t make this assumption. Instead, it quantifies just how coordinated groups of actors are likely to be based on the social signals they have in common. Projects backed by more independent agents receive greater matching funds. Conversely, if a project’s support network shows higher levels of coordination, the matching funds are reduced, encouraging self-organized solutions within more coordinated groups.
 
 ''')
 
 
-if 'QF' in strategies:
-    for strategy in strategies:
-        if strategy != 'QF':
-            matching_df[f'{strategy} Diff'] = ( matching_df[f'{strategy} Match'] - matching_df['QF Match'] )
-            
-            st.metric(label=f"Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy} Diff'].abs().sum():.2f}" + ' ' + matching_token_symbol)
-            st.metric(label=f"Percentage of Matching Funds Redistributed by {strategy}", value=f"{matching_df[f'{strategy} Diff'].abs().sum() / matching_amount * 100:.2f}" + '%')
+all_projects = df['project_name'].unique()
+st.write('')
+projects_to_remove = st.multiselect('Projects may be removed from the matching distribution by selecting them here:', all_projects)
+df = df[~df['project_name'].isin(projects_to_remove)]
+st.write('')
 
+# Calculate matching results with passport on
+df_with_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
+votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
 
-for column in matching_df.columns:
-    if column != 'Project':
-        matching_df[column] = matching_df[column].apply(lambda x: round(x, 2))
+# Calculate matching results with passport off
+#df_without_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, 0, 0)
+#votes_df_without_passport = fundingutils.pivot_votes(df_without_passport)
+#suffixes = ['(Passport On)', '(Passport Off)']
 
-st.dataframe(matching_df, use_container_width=True)
+def get_matching(strategy, votes_df, matching_amount, suffix=None):
+    df = fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_amount,cluster_df=votes_df)
+    df = df.rename(columns={'project_name': 'Project', 'matching_amount': f'{strategy} Match', 'matching_percent': f'{strategy} Match %'})
+    return df
+
+strategies = ['COCM', 'QF']
+
+# Calculate matching results for both strategies and both scenarios
+matching_dfs = []
+#for suffix, votes_df in zip(suffixes, [votes_df_with_passport, votes_df_without_passport]):
+for strategy in strategies:
+    matching_dfs.append(get_matching(strategy, votes_df_with_passport, matching_amount))
+
+# Merge all matching results into a single DataFrame
+matching_df = matching_dfs[0]
+for dft in matching_dfs[1:]:
+    matching_df = pd.merge(matching_df, dft, on='Project', how='outer')
+
+# Ensure there are no duplicate rows in the dataframe before merging
+df_unique = df[['project_name', 'chain_id', 'round_id', 'application_id']].drop_duplicates()
+
+matching_df = pd.merge(matching_df, df_unique, left_on='Project', right_on='project_name', how='left')
+matching_df['Project Page'] = 'https://explorer.gitcoin.co/#/round/' + matching_df['chain_id'].astype(str) + '/' + matching_df['round_id'].astype(str) + '/' + matching_df['application_id'].astype(str)
+
+# Sort the dataframe by 'COCM Match' in descending order
+matching_df = matching_df.sort_values(by='COCM Match', ascending=False)
+
+# Configure the dataframe display
+column_config = {
+    "Project": st.column_config.TextColumn("Project"),
+    "COCM Match": st.column_config.NumberColumn("COCM Match", format="%.2f"),
+    "QF Match": st.column_config.NumberColumn("QF Match", format="%.2f"),
+    "COCM Match %": st.column_config.NumberColumn("COCM Match %", format="%.2f"),
+    "QF Match %": st.column_config.NumberColumn("QF Match %", format="%.2f"),
+    "Project Page": st.column_config.LinkColumn("Project Page", display_text="Visit")
+}
+
+# Reorder columns to ensure 'Project' is first and 'Project Page' is last
+matching_df = matching_df.drop(columns=['project_name', 'chain_id', 'round_id', 'application_id'])
+columns_order = ['Project'] + [col for col in matching_df.columns if col not in ['Project', 'Project Page']] + ['Project Page']
+display_matching_df = matching_df[columns_order]
+
+# Use Streamlit's dataframe to display the data
+st.subheader('Matching Results')
+st.dataframe(
+    display_matching_df,
+    use_container_width=True,
+    column_config=column_config,
+    hide_index=True
+)
+
 st.markdown('Matching Values shown above are in **' + matching_token_symbol + '**')
+##
+
 output_df = matching_df[['Project', 'COCM Match']]
 
 
@@ -182,7 +347,17 @@ output_df = output_df.rename(columns={'id': 'applicationId', 'project_id':'proje
 output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddress', 'matched', 'contributionsCount', 'totalReceived']]
 output_df['matchedUSD'] = (output_df['matched'] * matching_token_price).round(2)
 output_df['matched'] = output_df['matched'] * 10**matching_token_decimals
-output_df['totalReceived'] = output_df['totalReceived'] * (1e18) # come back and put in round token
+output_df['totalReceived'] = output_df['totalReceived'] * (10**matching_token_decimals) 
+output_df = output_df.fillna(0)
+
+
+full_matching_funds_available = int(matching_funds_available * 10**matching_token_decimals)
+all_matching_funds_available = full_matching_funds_available  >= int(output_df['matched'].astype(float).sum())
+if not all_matching_funds_available:
+    st.warning('The total matched funds exceed the available matching funds. Please talk to @umarkhaneth on telegram')
+    st.warning('Matching funds available: ' + '{:.0f}'.format(matching_funds_available * 10**matching_token_decimals))
+    st.warning('Total matched funds: ' + '{:.0f}'.format(output_df['matched'].sum()))
+    st.warning('Difference: ' + str((output_df['matched'].sum() - matching_funds_available * 10**matching_token_decimals)))
 
 # Add additional columns
 output_df['matched'] = output_df['matched'].apply(lambda x: '{:.0f}'.format(x) if pd.notnull(x) else x)   
@@ -194,10 +369,10 @@ output_df['capOverflow'] = 0
 output_df['matchedWithoutCap'] = 0
 output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddress', 'matchedUSD', 'totalReceived', 'contributionsCount', 'matched', 'sumOfSqrt', 'capOverflow', 'matchedWithoutCap']]
 
-st.header('Download COCM Matching Results')
+st.subheader('Download COCM Matching Distribution')
 st.write(output_df)
 st.download_button(
-    label="Download Output Data",
+    label="⬇️ Download COCM Distribution",
     data=output_df.to_csv(index=False),
     file_name='output_data.csv',
     mime='text/csv'

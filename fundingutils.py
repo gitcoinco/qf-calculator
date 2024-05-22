@@ -68,17 +68,6 @@ def check_matching_cap(col, matching_cap_percent):
     # Return the updated project data
     return col
 
-def scale_matching(funding, matching_cap_percent, matching_amount):
-    projects = list(funding.keys())
-    total_money = sum(funding.values())
-    funding_normalized = {p: funding[p]/total_money for p in projects} 
-    # Create DataFrame with 'project_name' and 'matching_amount' columns
-    result = pd.DataFrame(list(funding_normalized.items()), columns=['project_name', 'matching_amount'])
-    # Apply the cap to the 'matching_amount' column
-    result['matching_amount'] = check_matching_cap(result['matching_amount'], matching_cap_percent)
-    # Scale the 'matching_amount' column by the total matching amount
-    result['matching_amount'] = result['matching_amount'] * matching_amount
-    return result
 
 # now on to the QF variants
 
@@ -301,6 +290,8 @@ def COCM(donation_df, cluster_df, calcstyle='markov', harsh=True):
 
   return funding
 
+
+
 def standard_donation(donation_df):
   # just do a normal vote (nothing quadratic)
   projects = donation_df.columns
@@ -357,4 +348,7 @@ def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cl
     # Scale the 'matching_amount' column by the total matching amount
     result['matching_percent'] = result['matching_amount'] * 100
     result['matching_amount'] = result['matching_amount'] * matching_amount
+
+    while (sum(result['matching_amount'])*1e18) > (matching_amount*1e18):
+        result['matching_amount'] = result['matching_amount'] * (matching_amount / sum(result['matching_amount']))
     return result
