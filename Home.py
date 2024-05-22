@@ -66,7 +66,10 @@ st.header('Cluster Match Results')
 
 matching_amount = rounds['matching_funds_available'].astype(float).values[0]
 df = utils.get_round_votes(round_id, chain_id)
-#st.write(df)
+if round_id == '25' and chain_id == 42161:
+    earth_df = pd.read_csv('data/manual_earth_add_for_dapps_round.csv')
+    df = pd.concat([df, earth_df])
+
 
 
 
@@ -277,7 +280,7 @@ st.write('')
 # Calculate matching results with passport on
 df_with_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
 votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
-st.write(votes_df_with_passport)
+#st.write(votes_df_with_passport)
 # Calculate matching results with passport off
 #df_without_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, 0, 0)
 #votes_df_without_passport = fundingutils.pivot_votes(df_without_passport)
@@ -304,6 +307,9 @@ for dft in matching_dfs[1:]:
 
 # Ensure there are no duplicate rows in the dataframe before merging
 df_unique = df[['project_name', 'chain_id', 'round_id', 'application_id']].drop_duplicates()
+if round_id == '25' and chain_id == 42161:
+    df_unique = df_unique[~((df_unique['project_name'] == '$EARTH - Oss') & (df_unique['chain_id'] == 42161) & (df_unique['round_id'] == 25) & (df_unique['application_id'] == 190))]
+
 
 matching_df = pd.merge(matching_df, df_unique, left_on='Project', right_on='project_name', how='left')
 matching_df['Project Page'] = 'https://explorer.gitcoin.co/#/round/' + matching_df['chain_id'].astype(str) + '/' + matching_df['round_id'].astype(str) + '/' + matching_df['application_id'].astype(str)
@@ -342,11 +348,11 @@ output_df = matching_df[['Project', 'COCM Match']]
 
 
 projects_df = utils.get_projects_in_round(round_id, chain_id)
-st.header('checking projects df')
-st.write(projects_df)
+
 if round_id == '23' and chain_id == 42161:
     projects_df = projects_df[~((projects_df['project_name'].str.contains('dspyt', case=False, na=False)) & (projects_df['id'] == '55'))]
 
+    
 
 
 output_df = pd.merge(output_df, projects_df, left_on='Project', right_on='project_name', how='outer')
@@ -394,8 +400,17 @@ st.write('You can upload this CSV to manager.gitcoin.co to apply the cluster mat
 results_summary_df = output_df[['projectName', 'matched', 'totalReceived']].copy()
 
 # Convert totalReceived back into USD
-results_summary_df['totalReceived'] = (results_summary_df['totalReceived'].astype(float) / (10**matching_token_decimals)).round(2)
+# Sum amountUSD by project_name in df
+amount_usd_sum_df = df.groupby('project_name')['amountUSD'].sum().reset_index()
+amount_usd_sum_df = amount_usd_sum_df.rename(columns={'amountUSD': 'crowdfunding'})
+
+
+#results_summary_df['totalReceived'] = (results_summary_df['totalReceived'].astype(float) / (10**matching_token_decimals)).round(2)
+results_summary_df = results_summary_df.merge(amount_usd_sum_df[['project_name', 'crowdfunding']], left_on='projectName', right_on='project_name', how='left')
+results_summary_df['totalReceived'] = results_summary_df['crowdfunding']
 results_summary_df['matched'] = (results_summary_df['matched'].astype(float) / (10**matching_token_decimals)).round(2)
+results_summary_df = results_summary_df.drop(columns=['project_name', 'crowdfunding'])
+
 
 # Calculate unique voters for each project
 unique_voters_df = df.groupby('project_name')['voter'].nunique().reset_index()
