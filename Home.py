@@ -120,7 +120,8 @@ if min_donation_threshold_amount == 1.0:
     min_donation_threshold_amount = 0.99
 
 df = pd.merge(df, scores[['address', 'rawScore']], left_on='voter', right_on='address', how='left')
-
+if round_id == '23' and chain_id == 42161:
+    df.loc[(df['project_name'].str.contains('dspyt', case=False, na=False)) & (df['application_id'] == '55'), ['application_id', 'project_id', 'project_name']] = ['23', '0xce0872a742054bc052f1ea614aebb015b9791267b1bd47cb3c68ad745d6f43ac', 'Dspyt-CodeVerse']
 
 
 #turn_off_passport = st.sidebar.checkbox('Turn off passport', value=False)
@@ -267,7 +268,7 @@ Connection-oriented cluster-matching (COCM) doesn’t make this assumption. Inst
 ''')
 
 
-all_projects = df['project_name'].unique()
+all_projects = sorted(df['project_name'].unique())
 st.write('')
 projects_to_remove = st.multiselect('Projects may be removed from the matching distribution by selecting them here:', all_projects)
 df = df[~df['project_name'].isin(projects_to_remove)]
@@ -276,7 +277,7 @@ st.write('')
 # Calculate matching results with passport on
 df_with_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
 votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
-
+st.write(votes_df_with_passport)
 # Calculate matching results with passport off
 #df_without_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, 0, 0)
 #votes_df_without_passport = fundingutils.pivot_votes(df_without_passport)
@@ -299,6 +300,7 @@ for strategy in strategies:
 matching_df = matching_dfs[0]
 for dft in matching_dfs[1:]:
     matching_df = pd.merge(matching_df, dft, on='Project', how='outer')
+
 
 # Ensure there are no duplicate rows in the dataframe before merging
 df_unique = df[['project_name', 'chain_id', 'round_id', 'application_id']].drop_duplicates()
@@ -340,6 +342,11 @@ output_df = matching_df[['Project', 'COCM Match']]
 
 
 projects_df = utils.get_projects_in_round(round_id, chain_id)
+st.header('checking projects df')
+st.write(projects_df)
+if round_id == '23' and chain_id == 42161:
+    projects_df = projects_df[~((projects_df['project_name'].str.contains('dspyt', case=False, na=False)) & (projects_df['id'] == '55'))]
+
 
 
 output_df = pd.merge(output_df, projects_df, left_on='Project', right_on='project_name', how='outer')
@@ -378,3 +385,58 @@ st.download_button(
     mime='text/csv'
 )
 st.write('You can upload this CSV to manager.gitcoin.co to apply the cluster matching results to your round')
+
+
+
+# Add a 'Results Summary' section including a dataframe that has: Project, Matching Funds, Crowdfunding (in USD), and Unique Voters
+
+# Calculate the required columns
+results_summary_df = output_df[['projectName', 'matched', 'totalReceived']].copy()
+
+# Convert totalReceived back into USD
+results_summary_df['totalReceived'] = (results_summary_df['totalReceived'].astype(float) / (10**matching_token_decimals)).round(2)
+results_summary_df['matched'] = (results_summary_df['matched'].astype(float) / (10**matching_token_decimals)).round(2)
+
+# Calculate unique voters for each project
+unique_voters_df = df.groupby('project_name')['voter'].nunique().reset_index()
+unique_voters_df = unique_voters_df.rename(columns={'voter': 'Unique Voters', 'project_name': 'projectName'})
+
+# Calculate unique voters with a score above the 50% threshold for each project
+unique_voters_above_50_df = df[df['rawScore'] >= score_at_50_percent].groupby('project_name')['voter'].nunique().reset_index()
+unique_voters_above_50_df = unique_voters_above_50_df.rename(columns={'voter': 'Passing Voters', 'project_name': 'projectName'})
+
+# Merge unique voters into results_summary_df
+results_summary_df = pd.merge(results_summary_df, unique_voters_df, on='projectName', how='left')
+results_summary_df['Avg Matching Per Voter'] = results_summary_df['matched'] / results_summary_df['Unique Voters']
+results_summary_df = pd.merge(results_summary_df, unique_voters_above_50_df, on='projectName', how='left')
+results_summary_df['Percent Passing'] = results_summary_df['Passing Voters'] / results_summary_df['Unique Voters'] * 100
+
+# Merge project page into results_summary_df
+matching_df_links = matching_df[['Project', 'Project Page']]
+results_summary_df = pd.merge(results_summary_df, matching_df_links, left_on='projectName', right_on='Project', how='left')
+results_summary_df = results_summary_df.drop(columns=['Project'])
+results_summary_df = results_summary_df.rename(columns={
+    'projectName': 'Project',
+    'matched': 'Matching Funds',
+    'totalReceived': 'Crowdfunding (in USD)',
+    'Unique Voters': 'Unique Voters',
+    'Passing Voters': 'Passing Voters',
+    'Percent Passing': 'Percent Passing',
+    'Avg Matching Per Voter': 'Avg Matching Per Voter',
+    'Project Page': 'Project Page'
+})
+
+column_config = {
+    "Project": st.column_config.TextColumn("Project"),
+    "Matching Funds": st.column_config.NumberColumn("Matching Funds", format="%.2f"),
+    "Crowdfunding (in USD)": st.column_config.NumberColumn("Crowdfunding (in USD)", format="%.2f"),
+    "Unique Voters": st.column_config.NumberColumn("Unique Voters"),
+    "Passing Voters": st.column_config.NumberColumn("Passing Voters"),
+    "Percent Passing": st.column_config.NumberColumn("Percent Passing", format="%.2f"),
+    "Avg Matching Per Voter": st.column_config.NumberColumn("Avg Matching Per Voter", format="%.2f"),
+    "Project Page": st.column_config.LinkColumn("Project Page")
+}
+
+# Display the 'Results Summary' section
+st.header('Results Summary')
+st.dataframe(results_summary_df, use_container_width=True, column_config=column_config, hide_index=True)
