@@ -290,6 +290,8 @@ def COCM(donation_df, cluster_df, calcstyle='markov', harsh=True):
 
   return funding
 
+
+
 def standard_donation(donation_df):
   # just do a normal vote (nothing quadratic)
   projects = donation_df.columns
@@ -324,13 +326,12 @@ def pivot_votes(round_votes):
 @st.cache_resource(ttl=36000)
 def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cluster_df = None):
     projects = donation_df.columns
-    st.write(donation_df)
     if algo == 'donation_profile_clustermatch':
         funding = donation_profile_clustermatch(donation_df)
     elif algo == 'pairwise':
         funding = pairwise(donation_df)
     elif algo == 'COCM': #markov
-        funding = COCM(donation_df, cluster_df, calcstyle='markov')
+        funding = COCM(donation_df, cluster_df)
     elif algo == 'COCM og':
         funding = COCM(donation_df, cluster_df, calcstyle='og')
     elif algo == 'COCM pct_friends':
@@ -342,16 +343,12 @@ def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cl
     # Create DataFrame with 'project_name' and 'matching_amount' columns
     result = pd.DataFrame(list(funding_normalized.items()), columns=['project_name', 'matching_amount'])
     # Apply the cap to the 'matching_amount' column
-    st.header(algo)
-    st.write(result)
     if matching_cap_percent < 100:
       result['matching_amount'] = check_matching_cap(result['matching_amount'], matching_cap_percent/100)
     # Scale the 'matching_amount' column by the total matching amount
     result['matching_percent'] = result['matching_amount'] * 100
     result['matching_amount'] = result['matching_amount'] * matching_amount
-    st.header(algo)
-    st.write(result)
-    #while (sum(result['matching_amount'])*1e18) > (matching_amount*1e18):
-        #st.header('not allowed bish')
-        #result['matching_amount'] = result['matching_amount'] * (matching_amount / sum(result['matching_amount']))
+
+    while (sum(result['matching_amount'])*1e18) > (matching_amount*1e18):
+        result['matching_amount'] = result['matching_amount'] * (matching_amount / sum(result['matching_amount']))
     return result

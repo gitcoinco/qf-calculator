@@ -268,16 +268,13 @@ Connection-oriented cluster-matching (COCM) doesn’t make this assumption. Inst
 
 
 all_projects = df['project_name'].unique()
-#projects_to_remove = st.multiselect('Projects which violated rules may be removed from the matching distribution by selecting them here:', all_projects)
-#df = df[~df['project_name'].isin(projects_to_remove)]
+st.write('')
+projects_to_remove = st.multiselect('Projects may be removed from the matching distribution by selecting them here:', all_projects)
+df = df[~df['project_name'].isin(projects_to_remove)]
+st.write('')
 
-
-
-
-##
 # Calculate matching results with passport on
 df_with_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
-st.write(df_with_passport)
 votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
 
 # Calculate matching results with passport off
@@ -309,22 +306,28 @@ df_unique = df[['project_name', 'chain_id', 'round_id', 'application_id']].drop_
 matching_df = pd.merge(matching_df, df_unique, left_on='Project', right_on='project_name', how='left')
 matching_df['Project Page'] = 'https://explorer.gitcoin.co/#/round/' + matching_df['chain_id'].astype(str) + '/' + matching_df['round_id'].astype(str) + '/' + matching_df['application_id'].astype(str)
 
-# Sort the dataframe by 'COCM Match (Passport On)' in descending order
+# Sort the dataframe by 'COCM Match' in descending order
 matching_df = matching_df.sort_values(by='COCM Match', ascending=False)
 
 # Configure the dataframe display
 column_config = {
     "Project": st.column_config.TextColumn("Project"),
+    "COCM Match": st.column_config.NumberColumn("COCM Match", format="%.2f"),
+    "QF Match": st.column_config.NumberColumn("QF Match", format="%.2f"),
+    "COCM Match %": st.column_config.NumberColumn("COCM Match %", format="%.2f"),
+    "QF Match %": st.column_config.NumberColumn("QF Match %", format="%.2f"),
     "Project Page": st.column_config.LinkColumn("Project Page", display_text="Visit")
 }
 
-# Reorder columns to ensure 'Project' is first and 'Project Link' is last
+# Reorder columns to ensure 'Project' is first and 'Project Page' is last
+matching_df = matching_df.drop(columns=['project_name', 'chain_id', 'round_id', 'application_id'])
 columns_order = ['Project'] + [col for col in matching_df.columns if col not in ['Project', 'Project Page']] + ['Project Page']
-matching_df = matching_df[columns_order]
+display_matching_df = matching_df[columns_order]
 
 # Use Streamlit's dataframe to display the data
+st.subheader('Matching Results')
 st.dataframe(
-    matching_df.drop(columns=['project_name', 'chain_id', 'round_id', 'application_id']),
+    display_matching_df,
     use_container_width=True,
     column_config=column_config,
     hide_index=True
@@ -345,6 +348,8 @@ output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddre
 output_df['matchedUSD'] = (output_df['matched'] * matching_token_price).round(2)
 output_df['matched'] = output_df['matched'] * 10**matching_token_decimals
 output_df['totalReceived'] = output_df['totalReceived'] * (10**matching_token_decimals) 
+output_df = output_df.fillna(0)
+
 
 full_matching_funds_available = int(matching_funds_available * 10**matching_token_decimals)
 all_matching_funds_available = full_matching_funds_available  >= int(output_df['matched'].astype(float).sum())
@@ -364,10 +369,10 @@ output_df['capOverflow'] = 0
 output_df['matchedWithoutCap'] = 0
 output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddress', 'matchedUSD', 'totalReceived', 'contributionsCount', 'matched', 'sumOfSqrt', 'capOverflow', 'matchedWithoutCap']]
 
-st.header('Download COCM Matching Results')
+st.subheader('Download COCM Matching Distribution')
 st.write(output_df)
 st.download_button(
-    label="Download Output Data",
+    label="⬇️ Download COCM Distribution",
     data=output_df.to_csv(index=False),
     file_name='output_data.csv',
     mime='text/csv'
