@@ -41,8 +41,14 @@ query_params_chain_id = st.query_params.get_all('chain_id')
 if len(query_params_chain_id) == 1 and not st.session_state.chain_id:
     st.session_state.chain_id = query_params_chain_id[0]
     
-round_id = st.session_state.round_id.lower()
-chain_id = int(st.session_state.chain_id)
+if st.session_state.round_id is None or st.session_state.chain_id is None:
+    st.header('Oops! Something went wrong. Youre not supposed to be here 🙈')
+    st.subheader('Please provide round_id and chain_id in the URL')
+    st.subheader('Example: https://qf-calculator.fly.dev/?round_id=23&chain_id=42161')
+    st.stop()
+else:
+    round_id = st.session_state.round_id.lower()
+    chain_id = int(st.session_state.chain_id)
 
 st.image('657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width = 300)
 
@@ -68,9 +74,6 @@ matching_amount = rounds['matching_funds_available'].astype(float).values[0]
 df = utils.get_round_votes(round_id, chain_id)
 #st.write(df)
 
-
-
-
 ## LOAD PASSPORT DATA 
 unique_voters = df['voter'].drop_duplicates()
 
@@ -78,17 +81,17 @@ if chain_id == 43114:
     scores = utils.load_avax_scores(unique_voters)
     score_at_50_percent = 25
     score_at_100_percent = 25
-    st.write('Using Avalanche Passport')
+    sybilDefense = 'Avalanche Passport'
 elif sybilDefense == 'true':
-    st.write('Using Passport Stamps')
     score_at_50_percent = 15
     score_at_100_percent = 25
     scores = utils.load_stamp_scores(unique_voters)
+    sybilDefense = 'Passport Stamps'
 else:
-    st.write('Using Passport Model Based Detection System')
     score_at_50_percent = 1
     score_at_100_percent = 25
     scores = utils.load_passport_model_scores(unique_voters)
+    sybilDefense = 'Passport Model Based Detection System'
 
 ## LOAD TOKEN DATA 
 config_df = utils.fetch_tokens_config()
@@ -104,15 +107,15 @@ with st.spinner('Fetching token price...'):
 
 st.header('⚙️ Round Settings')
 col1, col2 = st.columns(2)
-col1.write(f"Chain: {chain}")
-col1.write(f"Matching Cap: {matching_cap_amount:.2f}%")
-col1.write(f"Sybil Defense Selected: {sybilDefense.capitalize()}")
+col1.write(f"**Chain:** {chain}")
+col1.write(f"**Matching Cap:** {matching_cap_amount:.2f}%")
+col1.write(f"**Sybil Defense Selected:** {sybilDefense}")
 total_voters = df['voter'].nunique()
-col1.write(f"Number of Unique Voters: {total_voters}")
-col2.write(f"Matching Available: {matching_funds_available:.2f}  {matching_token_symbol}")
-col2.write(f"Matching Token Price: ${matching_token_price:.2f}")
-col2.write(f"Minimum Donation Threshold Amount: ${min_donation_threshold_amount:.2f}")
-col2.write(f"Number of Unique Projects: {df['project_name'].nunique()}")
+col1.write(f"**Number of Unique Voters:** {total_voters}")
+col2.write(f"**Matching Available:** {matching_funds_available:.2f}  {matching_token_symbol}")
+col2.write(f"**Matching Token Price:** ${matching_token_price:.2f}")
+col2.write(f"**Minimum Donation Threshold Amount:** ${min_donation_threshold_amount:.2f}")
+col2.write(f"**Number of Unique Projects:** {df['project_name'].nunique()}")
 
 
 
@@ -336,14 +339,29 @@ st.dataframe(
 st.markdown('Matching Values shown above are in **' + matching_token_symbol + '**')
 ##
 
-output_df = matching_df[['Project', 'COCM Match']]
+st.subheader('⬇️ Download Matching Distribution')
+# Let the user pick COCM or QF
+strategy_choice = st.selectbox(
+    'Select the matching strategy to download:',
+    ('COCM', 'QF')
+)
+st.write('You can upload this CSV to manager.gitcoin.co to apply the matching results to your round')
+
+# Filter the matching_df based on the selected strategy
+if strategy_choice == 'COCM':
+    matching_df['Match'] = matching_df['COCM Match']
+else:
+    matching_df['Match'] = matching_df['QF Match']
 
 
+
+
+output_df = matching_df[['Project', 'Match']]
 projects_df = utils.get_projects_in_round(round_id, chain_id)
 
 
 output_df = pd.merge(output_df, projects_df, left_on='Project', right_on='project_name', how='outer')
-output_df = output_df.rename(columns={'id': 'applicationId', 'project_id':'projectId', 'project_name': 'projectName', 'recipient_address':'payoutAddress', 'total_donations_count':'contributionsCount', 'COCM Match': 'matched', 'total_amount_donated_in_usd':'totalReceived'})
+output_df = output_df.rename(columns={'id': 'applicationId', 'project_id':'projectId', 'project_name': 'projectName', 'recipient_address':'payoutAddress', 'total_donations_count':'contributionsCount', 'Match': 'matched', 'total_amount_donated_in_usd':'totalReceived'})
 output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddress', 'matched', 'contributionsCount', 'totalReceived']]
 output_df['matchedUSD'] = (output_df['matched'] * matching_token_price).round(2)
 output_df['matched'] = output_df['matched'] * 10**matching_token_decimals
@@ -369,12 +387,11 @@ output_df['capOverflow'] = 0
 output_df['matchedWithoutCap'] = 0
 output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddress', 'matchedUSD', 'totalReceived', 'contributionsCount', 'matched', 'sumOfSqrt', 'capOverflow', 'matchedWithoutCap']]
 
-st.subheader('Download COCM Matching Distribution')
+
 st.write(output_df)
 st.download_button(
-    label="⬇️ Download COCM Distribution",
+    label="⬇ Download Matching Distribution",
     data=output_df.to_csv(index=False),
     file_name='output_data.csv',
     mime='text/csv'
 )
-st.write('You can upload this CSV to manager.gitcoin.co to apply the cluster matching results to your round')
