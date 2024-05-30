@@ -8,7 +8,7 @@ import fundingutils
 
 
 st.set_page_config(
-    page_title="Cluster Match Results",
+    page_title="Matching Results",
     page_icon="favicon.png",
     layout="wide",
 )
@@ -53,9 +53,7 @@ else:
 st.image('657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width = 300)
 
 rounds = utils.get_round_summary()
-#st.write(rounds)
 rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)]
-
 
 round_name = rounds['round_name'].values[0]
 matching_cap_amount = rounds['matching_cap_amount'].astype(float).values[0] if 'matching_cap_amount' in rounds and not pd.isnull(rounds['matching_cap_amount'].values[0]) else 100.0
@@ -65,14 +63,10 @@ sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds and 
 token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
 chain = blockchain_mapping.get(rounds['chain_id'].values[0] if 'chain_id' in rounds else 1)
 
-st.title(f'{round_name}')
-st.header('Cluster Match Results')
-
-#st.write(rounds)
-
+st.title(f'{round_name} - Matching Results')
 matching_amount = rounds['matching_funds_available'].astype(float).values[0]
 df = utils.get_round_votes(round_id, chain_id)
-#st.write(df)
+
 
 ## LOAD PASSPORT DATA 
 unique_voters = df['voter'].drop_duplicates()
