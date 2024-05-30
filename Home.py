@@ -42,8 +42,8 @@ if len(query_params_chain_id) == 1 and not st.session_state.chain_id:
     st.session_state.chain_id = query_params_chain_id[0]
     
 if st.session_state.round_id is None or st.session_state.chain_id is None:
-    st.header('Oops! Something went wrong. Youre not supposed to be here 🙈')
-    st.subheader('Please provide round_id and chain_id in the URL')
+    st.header("Oops! Something went wrong. You're not supposed to be here 🙈")
+    st.subheader("Please provide round_id and chain_id in the URL")
     st.subheader('Example: https://qf-calculator.fly.dev/?round_id=23&chain_id=42161')
     st.stop()
 else:
