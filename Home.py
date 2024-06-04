@@ -365,7 +365,7 @@ output_df = output_df.fillna(0)
 
 full_matching_funds_available = int(matching_funds_available * 10**matching_token_decimals)
 all_matching_funds_available = full_matching_funds_available  >= int(output_df['matched'].astype(float).sum())
-st.header('Trying to match: ' + '{:.0f}'.format(output_df['matched'].sum()) + ' out of ' + '{:.0f}'.format(full_matching_funds_available))
+#st.header('Trying to match: ' + '{:.0f}'.format(output_df['matched'].sum()) + ' out of ' + '{:.0f}'.format(full_matching_funds_available))
 if not all_matching_funds_available:
     st.warning('The total matched funds exceed the available matching funds. Please talk to @umarkhaneth on telegram')
     st.warning('Matching funds available: ' + '{:.0f}'.format(matching_funds_available * 10**matching_token_decimals))

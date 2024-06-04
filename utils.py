@@ -10,8 +10,8 @@ from dune_client.types import QueryParameter
 from dune_client.client import DuneClient
 import time
 
-ttl_short = 300
-ttl_long = 3600
+ttl_short = 900 # 15 minutes
+ttl_long = 36000 # 10 hours
 
 
 def run_query(query):
@@ -49,17 +49,18 @@ def run_query_with_params(query, params, database="indexer"):
 
 def load_data_from_url(url):
     try:
-        st.write("trying new method")
         response = requests.get(url, stream=True)
         response.raise_for_status()  # Raise an error for bad responses
         lines = (line.decode('utf-8') for line in response.iter_lines())
         data = [json.loads(line) for line in lines if line]  # Ignore blank lines
         return data
     except requests.RequestException as e:
-        print(f"Failed to fetch data from {url}. Error: {e}")
+        st.warning(f"Failed to fetch data from {url}. Error: {e}")
+    except json.JSONDecodeError as e:
+        st.warning(f"Failed to parse JSON data from {url}. Error: {e}")
         return []
 
-@st.cache_resource(ttl=ttl_short)
+@st.cache_resource(ttl=0)
 def get_round_summary():
     sql_query_file = 'queries/get_rounds_summary_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
@@ -67,7 +68,7 @@ def get_round_summary():
     results = run_query(query)
     return results
 
-@st.cache_resource(ttl=ttl_long)
+@st.cache_resource(ttl=ttl_short)
 def get_round_votes(round_id, chain_id):
     sql_query_file = 'queries/get_votes_by_round_id_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
@@ -79,7 +80,7 @@ def get_round_votes(round_id, chain_id):
     results = run_query_with_params(query, params)  # Ensure your run_query can handle parameterized inputs
     return results
 
-@st.cache_resource(ttl=ttl_long)
+@st.cache_resource(ttl=ttl_short)
 def get_projects_in_round(round_id, chain_id):
     sql_query_file = 'queries/get_projects_summary_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
@@ -94,15 +95,9 @@ def get_projects_in_round(round_id, chain_id):
     
 @st.cache_resource(ttl=ttl_long) 
 def load_passport_model_scores(addresses):
-    st.header("HELLO")
     url = 'https://public.scorer.gitcoin.co/eth_model_scores_v2/eth_model_scores.jsonl'
-    st.write('loading data from url')
-    st.write('about to start...')
     scores = load_data_from_url(url)
-    st.write('data loaded')
-    st.write(scores)
     scores = pd.DataFrame(scores)
-    st.write(scores)
     for key in scores['data'][0].keys():
         scores[key] = scores['data'].apply(lambda x: x.get(key, np.nan))
     scores.drop('data', axis=1, inplace=True)
