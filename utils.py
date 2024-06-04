@@ -10,8 +10,10 @@ from dune_client.types import QueryParameter
 from dune_client.client import DuneClient
 import time
 
+ttl_short = 300
+ttl_long = 3600
 
-@st.cache_resource(ttl=36000)
+
 def run_query(query):
     """Run query and return results"""
     try:
@@ -30,13 +32,12 @@ def run_query(query):
         conn.close()
     return results
 
-@st.cache_resource(ttl=36000)
-def run_query_with_params(query, params):
-    conn = pg.connect(host=st.secrets["indexer"]["host"], 
-                           port=st.secrets["indexer"]["port"], 
-                           dbname=st.secrets["indexer"]["dbname"], 
-                           user=st.secrets["indexer"]["user"], 
-                           password=st.secrets["indexer"]["password"])
+def run_query_with_params(query, params, database="indexer"):
+    conn = pg.connect(host=st.secrets[database]["host"], 
+                           port=st.secrets[database]["port"], 
+                           dbname=st.secrets[database]["dbname"], 
+                           user=st.secrets[database]["user"], 
+                           password=st.secrets[database]["password"])
     cur = conn.cursor()
     cur.execute(query, params)
     col_names = [desc[0] for desc in cur.description]
@@ -45,22 +46,20 @@ def run_query_with_params(query, params):
     conn.close()
     return results
 
-def run_grants_query_with_params(query, params):
-    conn = pg.connect(     host=st.secrets["grants"]["host"], 
-                           port=st.secrets["grants"]["port"], 
-                           dbname=st.secrets["grants"]["dbname"], 
-                           user=st.secrets["grants"]["user"], 
-                           password=st.secrets["grants"]["password"]
-                           )
-    cur = conn.cursor()
-    #st.write(f"Executing query: {cur.mogrify(query, params).decode()}")  # Print the query with parameters inserted
-    cur.execute(query, params)
-    col_names = [desc[0] for desc in cur.description]
-    results = pd.DataFrame(cur.fetchall(), columns=col_names)
-    cur.close()
-    conn.close()
-    return results
 
+def load_data_from_url(url):
+    try:
+        st.write("trying new method")
+        response = requests.get(url, stream=True)
+        response.raise_for_status()  # Raise an error for bad responses
+        lines = (line.decode('utf-8') for line in response.iter_lines())
+        data = [json.loads(line) for line in lines if line]  # Ignore blank lines
+        return data
+    except requests.RequestException as e:
+        print(f"Failed to fetch data from {url}. Error: {e}")
+        return []
+
+@st.cache_resource(ttl=ttl_short)
 def get_round_summary():
     sql_query_file = 'queries/get_rounds_summary_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
@@ -68,6 +67,7 @@ def get_round_summary():
     results = run_query(query)
     return results
 
+@st.cache_resource(ttl=ttl_long)
 def get_round_votes(round_id, chain_id):
     sql_query_file = 'queries/get_votes_by_round_id_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
@@ -79,6 +79,7 @@ def get_round_votes(round_id, chain_id):
     results = run_query_with_params(query, params)  # Ensure your run_query can handle parameterized inputs
     return results
 
+@st.cache_resource(ttl=ttl_long)
 def get_projects_in_round(round_id, chain_id):
     sql_query_file = 'queries/get_projects_summary_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
@@ -90,37 +91,23 @@ def get_projects_in_round(round_id, chain_id):
     results = run_query_with_params(query, params)
     return results
 
-#@st.cache(ttl=3600, allow_output_mutation=True)
-def get_token_price_from_dune(blockchain, token_address):
-    DUNE_API_KEY = st.secrets['dune']['DUNE_API_KEY']
-    sql_query_file = 'queries/get_token_price_from_dune.sql'
-    with open(sql_query_file, 'r') as file:
-            query = file.read()
-    query = query.format(blockchain=blockchain, token_address=token_address)
-    client = DuneClient(api_key=DUNE_API_KEY)
-    results = client.run_sql(
-        query_sql=query, 
-        performance='large')
-    data = results.result.rows
-    df = pd.DataFrame(data)
-    return df
-
-@st.cache_data(ttl=3600) 
-def load_data_from_url(url):
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an error for bad responses
-        return [json.loads(line) for line in response.text.splitlines()]
-    except requests.RequestException as e:
-        print(f"Failed to fetch data from {url}. Error: {e}")
-        return []
     
-
+@st.cache_resource(ttl=ttl_long) 
 def load_passport_model_scores(addresses):
+    st.header("HELLO")
     url = 'https://public.scorer.gitcoin.co/eth_model_scores_v2/eth_model_scores.jsonl'
+    st.write('loading data from url')
+    st.write('about to start...')
     scores = load_data_from_url(url)
+    st.write('data loaded')
+    st.write(scores)
     scores = pd.DataFrame(scores)
-    scores = scores.join(pd.json_normalize(scores['data'])).drop('data', axis=1)
+    st.write(scores)
+    for key in scores['data'][0].keys():
+        scores[key] = scores['data'].apply(lambda x: x.get(key, np.nan))
+    scores.drop('data', axis=1, inplace=True)
+    
+   # scores = scores.join(pd.json_normalize(scores['data'])).drop('data', axis=1)
     scores['address'] = scores['address'].str.lower()
     scores = scores[scores['address'].isin(addresses)]
     scores['score'] = scores['score'].astype(float)
@@ -137,6 +124,7 @@ def load_passport_model_scores(addresses):
 
     return df
 
+@st.cache_resource(ttl=ttl_long)
 def load_avax_scores(addresses):
     url = 'https://public.scorer.gitcoin.co/passport_scores/6608/registry_score.jsonl'
     scores = load_data_from_url(url)
@@ -149,9 +137,9 @@ def load_avax_scores(addresses):
     scores = scores.sort_values('last_score_timestamp', ascending=False).drop_duplicates('address')
     scores['score'] = scores['score'].astype(float)
     scores['rawScore'] = scores['rawScore'].astype(float)
-
     return scores
 
+@st.cache_resource(ttl=ttl_long)
 def load_stamp_scores(addresses):
     addresses = tuple(addresses)
     sql_query_file = 'queries/get_passport_stamps.sql'
@@ -160,8 +148,9 @@ def load_stamp_scores(addresses):
     params = {
         'addresses': addresses
     }
-    results = run_grants_query_with_params(query, params)  
+    results = run_query_with_params(query, params, database="grants")  
     return results
+
 
 def parse_config_file(file_content):
     data = []
@@ -218,7 +207,7 @@ def parse_config_file(file_content):
         print("No token data found in the file.")
         return None
     
-@st.cache_resource(ttl=3600)
+@st.cache_resource(ttl=ttl_long)
 def fetch_tokens_config():
     url = 'https://raw.githubusercontent.com/gitcoinco/grants-stack-indexer/main/src/config.ts'
     
@@ -233,7 +222,7 @@ def fetch_tokens_config():
     return df
 
 
-@st.cache_resource(ttl=3600)
+@st.cache_resource(ttl=ttl_long)
 def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['coingecko']['COINGECKO_API_KEY'], coingecko_api_url="https://api.coingecko.com/api/v3"):
     platforms = {
         1: "ethereum",
