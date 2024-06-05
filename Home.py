@@ -364,13 +364,17 @@ output_df = output_df.fillna(0)
 
 
 full_matching_funds_available = int(matching_funds_available * 10**matching_token_decimals)
-all_matching_funds_available = full_matching_funds_available  >= int(output_df['matched'].astype(float).sum())
+output_df['matched'] = output_df['matched'] * ((full_matching_funds_available-10) / sum(output_df['matched']))
+all_matching_funds_available = full_matching_funds_available  > (int(output_df['matched'].astype(float).sum())+10)
 #st.header('Trying to match: ' + '{:.0f}'.format(output_df['matched'].sum()) + ' out of ' + '{:.0f}'.format(full_matching_funds_available))
-if not all_matching_funds_available:
+while not all_matching_funds_available:
+    output_df['matched'] = output_df['matched'] * ((full_matching_funds_available-10) / sum(output_df['matched']))
+    all_matching_funds_available = full_matching_funds_available  > (int(output_df['matched'].astype(float).sum())+10)
     st.warning('The total matched funds exceed the available matching funds. Please talk to @umarkhaneth on telegram')
     st.warning('Matching funds available: ' + '{:.0f}'.format(matching_funds_available * 10**matching_token_decimals))
     st.warning('Total matched funds: ' + '{:.0f}'.format(output_df['matched'].sum()))
     st.warning('Difference: ' + str((output_df['matched'].sum() - matching_funds_available * 10**matching_token_decimals)))
+#st.header('Proceeding: ' + '{:.0f}'.format(output_df['matched'].sum()) + ' out of ' + '{:.0f}'.format(full_matching_funds_available))
 
 # Add additional columns
 output_df['matched'] = output_df['matched'].apply(lambda x: '{:.0f}'.format(x) if pd.notnull(x) else x)   
