@@ -352,6 +352,8 @@ else:
 
 output_df = matching_df[['Project', 'Match']]
 projects_df = utils.get_projects_in_round(round_id, chain_id)
+projects_df = projects_df[~projects_df['project_name'].isin(projects_to_remove)]
+
 
 
 output_df = pd.merge(output_df, projects_df, left_on='Project', right_on='project_name', how='outer')
@@ -374,7 +376,7 @@ while not all_matching_funds_available:
     st.warning('The total matched funds exceed the available matching funds. Please talk to @umarkhaneth on telegram. \n'
                'Matching funds available: ' + '{:.0f}'.format(matching_funds_available * 10**matching_token_decimals) + '\n'
                'Total matched funds: ' + '{:.0f}'.format(output_df['matched'].sum()) + '\n'
-               'Difference: ' + str((output_df['matched'].sum() - matching_funds_available * 10**matching_token_decimals)))
+               'Difference: ' + str((output_df['matched'].sum() - matching_funds_available * 10**matchisng_token_decimals)))
 #st.header('Proceeding: ' + '{:.0f}'.format(output_df['matched'].sum()) + ' out of ' + '{:.0f}'.format(full_matching_funds_available))
 
 # Add additional columns
