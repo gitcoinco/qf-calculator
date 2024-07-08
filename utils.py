@@ -6,8 +6,6 @@ import re
 from datetime import datetime, timezone
 import psycopg2 as pg
 import json
-from dune_client.types import QueryParameter
-from dune_client.client import DuneClient
 import time
 
 ttl_short = 900 # 15 minutes

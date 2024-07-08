@@ -3,4 +3,3 @@ streamlit
 pandas
 numpy
 psycopg2-binary
-dune_client

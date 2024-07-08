@@ -425,12 +425,12 @@ display_df = output_df.applymap(int_to_str)
 
 full_matching_funds_available = int(matching_funds_available * 10**matching_token_decimals)
 output_df['matched'] = (output_df['matched'] * ((full_matching_funds_available-10) / sum(output_df['matched'])))
-all_matching_funds_available = full_matching_funds_available  > (output_df['matched'].sum())+10
+all_matching_funds_available = full_matching_funds_available  > (output_df['matched'].sum())+9
 ## IS THERE A CLEANER WAY THAN THIS WHILE NOT LOOP? 
 while not all_matching_funds_available:
     full_matching_funds_available -= 10
     output_df['matched'] = (output_df['matched'] * ((full_matching_funds_available) / sum(output_df['matched'])))
-    all_matching_funds_available = full_matching_funds_available  > (output_df['matched'].sum())
+    all_matching_funds_available = (int(matching_funds_available * 10**matching_token_decimals))  > (output_df['matched'].sum())
     st.warning('The total matched funds exceed the available matching funds. Please talk to @umarkhaneth on telegram. \n'
                'Matching funds available: ' + '{:.0f}'.format(matching_funds_available * 10**matching_token_decimals) + '\n'
                'Total matched funds: ' + '{:.0f}'.format(output_df['matched'].sum()) + '\n'
