@@ -13,19 +13,67 @@ st.set_page_config(
     layout="wide",
 )
 
+def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
+    if chain_id == 43114: 
+        scores = utils.load_avax_scores(unique_voters)
+        score_at_50_percent = 25
+        score_at_100_percent = 25
+        sybilDefense = 'Avalanche Passport'
+    elif sybilDefense == 'true':
+        score_at_50_percent = 15
+        score_at_100_percent = 25
+        scores = utils.load_stamp_scores(unique_voters)
+        sybilDefense = 'Passport Stamps'
+    elif sybilDefense == 'passport-mbds':
+        score_at_50_percent = 1
+        score_at_100_percent = 25
+        scores = utils.load_passport_model_scores(unique_voters)
+        sybilDefense = 'Passport Model Based Detection System'
+    else:
+        score_at_50_percent = 0
+        score_at_100_percent = 0
+        scores = pd.DataFrame()
+        scores['address'] = unique_voters
+        scores['rawScore'] = 1
+        sybilDefense = 'None'
+    return scores, score_at_50_percent, score_at_100_percent, sybilDefense
 
-blockchain_mapping = {
-        1: "Ethereum",
-        10: "Optimism",
-        137: "Polygon",
-        250: "Fantom",
-        324: "ZKSync",
-        8453: "Base",
-        42161: "Arbitrum",
-        43114: "Avalanche",
-        534352: "Scroll"
+def load_data(): 
+    blockchain_mapping = {
+            1: "Ethereum",
+            10: "Optimism",
+            137: "Polygon",
+            250: "Fantom",
+            324: "ZKSync",
+            8453: "Base",
+            42161: "Arbitrum",
+            43114: "Avalanche",
+            534352: "Scroll",
+            1329: "SEI"
+        }
+    rounds = utils.get_round_summary()
+    rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)]
+    token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
+    sybilDefense = rounds['sybil_defense'].values[0] if 'sybil_defense' in rounds else 'None'
+    df = utils.get_round_votes(round_id, chain_id)
+    config_df = utils.fetch_tokens_config()
+    config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
+    matching_token_price = utils.fetch_latest_price(config_df['price_source_chain_id'].iloc[0], config_df['price_source_address'].iloc[0])
+    unique_voters = df['voter'].drop_duplicates()
+    scores, score_at_50_percent, score_at_100_percent, sybilDefense = load_scores_and_set_defense(chain_id, sybilDefense, unique_voters)
+
+    return {
+        "blockchain_mapping": blockchain_mapping,
+        "rounds": rounds,
+        "df": df,
+        "config_df": config_df,
+        "matching_token_price": matching_token_price,
+        "scores": scores,
+        "score_at_50_percent": score_at_50_percent,
+        "score_at_100_percent": score_at_100_percent,
+        "sybilDefense": sybilDefense
     }
-    
+
 if 'round_id' not in st.session_state:
     st.session_state.round_id = None
 
@@ -50,60 +98,43 @@ else:
     round_id = st.session_state.round_id.lower()
     chain_id = int(st.session_state.chain_id)
 
-st.image('657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width = 300)
 
-rounds = utils.get_round_summary()
-rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)]
+data = load_data()
+blockchain_mapping = data["blockchain_mapping"]
+rounds = data["rounds"]
+df = data["df"]
+config_df = data["config_df"]
+matching_token_price = data["matching_token_price"]
+scores = data["scores"]
+score_at_50_percent = data["score_at_50_percent"]
+score_at_100_percent = data["score_at_100_percent"]
+sybilDefense = data["sybilDefense"]
 
 round_name = rounds['round_name'].values[0]
 matching_cap_amount = rounds['matching_cap_amount'].astype(float).values[0] if 'matching_cap_amount' in rounds and not pd.isnull(rounds['matching_cap_amount'].values[0]) else 100.0
 matching_funds_available = rounds['matching_funds_available'].astype(float).values[0] if 'matching_funds_available' in rounds else 0
 min_donation_threshold_amount = rounds['min_donation_threshold_amount'].astype(float).values[0] if 'min_donation_threshold_amount' in rounds and not pd.isnull(rounds['min_donation_threshold_amount'].values[0]) else 0.0
-sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds and rounds['sybilDefense'].values[0] is not None else 'false'
 token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
 chain = blockchain_mapping.get(rounds['chain_id'].values[0] if 'chain_id' in rounds else 1)
 
+
+st.image('657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width = 300)
 st.title(f'{round_name} - Matching Results')
 matching_amount = rounds['matching_funds_available'].astype(float).values[0]
-df = utils.get_round_votes(round_id, chain_id)
-
-
-## LOAD PASSPORT DATA 
-unique_voters = df['voter'].drop_duplicates()
-
-if chain_id == 43114: 
-    scores = utils.load_avax_scores(unique_voters)
-    score_at_50_percent = 25
-    score_at_100_percent = 25
-    sybilDefense = 'Avalanche Passport'
-elif sybilDefense == 'true':
-    score_at_50_percent = 15
-    score_at_100_percent = 25
-    scores = utils.load_stamp_scores(unique_voters)
-    sybilDefense = 'Passport Stamps'
-else:
-    score_at_50_percent = 1
-    score_at_100_percent = 25
-    scores = utils.load_passport_model_scores(unique_voters)
-    sybilDefense = 'Passport Model Based Detection System'
 
 ## LOAD TOKEN DATA 
-config_df = utils.fetch_tokens_config()
 
-config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
 price_source_chain_id = config_df['price_source_chain_id'].iloc[0]
 price_source_token_address = config_df['price_source_address'].iloc[0]
 matching_token_decimals = config_df['token_decimals'].iloc[0]
 matching_token_symbol = config_df['token_code'].iloc[0]
 
-with st.spinner('Fetching token price...'):
-    matching_token_price = utils.fetch_latest_price(price_source_chain_id, price_source_token_address)
 
 st.header('⚙️ Round Settings')
 col1, col2 = st.columns(2)
 col1.write(f"**Chain:** {chain}")
 col1.write(f"**Matching Cap:** {matching_cap_amount:.2f}%")
-col1.write(f"**Sybil Defense Selected:** {sybilDefense}")
+col1.write(f"**Passport Defense Selected:** {sybilDefense}")
 total_voters = df['voter'].nunique()
 col1.write(f"**Number of Unique Voters:** {total_voters}")
 col2.write(f"**Matching Available:** {matching_funds_available:.2f}  {matching_token_symbol}")
@@ -120,15 +151,26 @@ df = pd.merge(df, scores[['address', 'rawScore']], left_on='voter', right_on='ad
 
 
 
-#turn_off_passport = st.sidebar.checkbox('Turn off passport', value=False)
-#if turn_off_passport:
-#    st.write('Passport is turned off')
-#    score_at_50_percent = 0
-#    score_at_100_percent = 0
 
-
-st.header('🛂 Passport Usage')
-st.subheader(f" {len(scores)} Users ({len(scores)/total_voters*100:.1f}%) Have a Passport Score")
+def create_treemap(dfv):
+    votes_by_voter_and_project = dfv.groupby(['voter', 'project_name'])['amountUSD'].sum().reset_index()
+    votes_by_voter_and_project['voter'] = votes_by_voter_and_project['voter'].str[:10] + '...'
+    votes_by_voter_and_project['shortened_title'] = votes_by_voter_and_project['project_name'].str[:15] + '...'
+    
+    fig = px.treemap(votes_by_voter_and_project, path=['shortened_title', 'voter'], values='amountUSD', hover_data=['project_name', 'amountUSD'])
+    # Update hovertemplate to format the hover information
+    fig.update_traces(
+        texttemplate='%{label}<br>$%{value:.3s}',
+        hovertemplate='<b>%{customdata[0]}</b><br>Amount: $%{customdata[1]:,.2f}',
+        textposition='middle center',
+        textfont_size=20
+    )
+    fig.update_traces(texttemplate='%{label}<br>$%{value:.3s}', textposition='middle center', textfont_size=20)
+    fig.update_layout(font=dict(size=20))
+    fig.update_layout(height=550)
+    fig.update_layout(title_text="Donations by Grant")
+    
+    return fig
 
 def calculate_verified_vs_unverified(scores, donations_df, score_threshold):
     verified_users_count = scores[scores['rawScore'] >= score_threshold].shape[0]
@@ -205,9 +247,12 @@ def calculate_verified_vs_unverified(scores, donations_df, score_threshold):
     return fig, summary_data
 
 # Call the function
-passport_usage_fig, passport_usage_df = calculate_verified_vs_unverified(scores, df, score_at_50_percent)
-st.plotly_chart(passport_usage_fig, use_container_width=True)
-#st.write(passport_usage_df)
+if sybilDefense != 'None':
+    st.header('🛂 Passport Usage')
+    st.subheader(f" {len(scores)} Users ({len(scores)/total_voters*100:.1f}%) Have a Passport Score")
+    passport_usage_fig, passport_usage_df = calculate_verified_vs_unverified(scores, df, score_at_50_percent)
+    st.plotly_chart(passport_usage_fig, use_container_width=True)
+    #st.write(passport_usage_df)
 
 
 st.header('👥 Crowdfunding')
@@ -270,14 +315,14 @@ projects_to_remove = st.multiselect('Projects may be removed from the matching d
 df = df[~df['project_name'].isin(projects_to_remove)]
 st.write('')
 
+
+
 # Calculate matching results with passport on
 df_with_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
 votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
 
-# Calculate matching results with passport off
-#df_without_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, 0, 0)
-#votes_df_without_passport = fundingutils.pivot_votes(df_without_passport)
-#suffixes = ['(Passport On)', '(Passport Off)']
+
+
 
 def get_matching(strategy, votes_df, matching_amount, suffix=None):
     df = fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_amount,cluster_df=votes_df)
@@ -333,6 +378,13 @@ st.dataframe(
 st.markdown('Matching Values shown above are in **' + matching_token_symbol + '**')
 ##
 
+
+
+
+# FOCUS ON WHAT HAPPENS BELOW THIS POINT FOR DEBUGGING 
+
+
+
 st.subheader('⬇️ Download Matching Distribution')
 # Let the user pick COCM or QF
 strategy_choice = st.selectbox(
@@ -353,35 +405,38 @@ else:
 output_df = matching_df[['Project', 'Match']]
 projects_df = utils.get_projects_in_round(round_id, chain_id)
 projects_df = projects_df[~projects_df['project_name'].isin(projects_to_remove)]
-
-
-
 output_df = pd.merge(output_df, projects_df, left_on='Project', right_on='project_name', how='outer')
 output_df = output_df.rename(columns={'id': 'applicationId', 'project_id':'projectId', 'project_name': 'projectName', 'recipient_address':'payoutAddress', 'total_donations_count':'contributionsCount', 'Match': 'matched', 'total_amount_donated_in_usd':'totalReceived'})
 output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddress', 'matched', 'contributionsCount', 'totalReceived']]
 output_df['matchedUSD'] = (output_df['matched'] * matching_token_price).round(2)
-output_df['matched'] = (output_df['matched'] * 10**matching_token_decimals).astype(int)
-output_df['totalReceived'] = output_df['totalReceived'] * (10**matching_token_decimals)
+output_df['matched'] = output_df['matched'].apply(lambda x: int(x * 10**matching_token_decimals))
+output_df['totalReceived'] = output_df['totalReceived'].apply(lambda x: int(x * 10**matching_token_decimals))
 output_df = output_df.fillna(0)
+
+# Function to convert large integers to strings for display
+def int_to_str(x):
+    if isinstance(x, int) and x > 2**53 - 1:  # JavaScript's max safe integer
+        return str(x)
+    return x
+
+# Convert large integers to strings for display
+display_df = output_df.applymap(int_to_str)
 
 
 full_matching_funds_available = int(matching_funds_available * 10**matching_token_decimals)
-output_df['matched'] = (output_df['matched'] * ((full_matching_funds_available-10) / sum(output_df['matched']))).astype(int)
+output_df['matched'] = (output_df['matched'] * ((full_matching_funds_available-10) / sum(output_df['matched'])))
 all_matching_funds_available = full_matching_funds_available  > (output_df['matched'].sum())+10
-#st.header('Trying to match: ' + '{:.0f}'.format(output_df['matched'].sum()) + ' out of ' + '{:.0f}'.format(full_matching_funds_available))
+## IS THERE A CLEANER WAY THAN THIS WHILE NOT LOOP? 
 while not all_matching_funds_available:
     full_matching_funds_available -= 10
-    output_df['matched'] = (output_df['matched'] * ((full_matching_funds_available) / sum(output_df['matched']))).astype(int)
+    output_df['matched'] = (output_df['matched'] * ((full_matching_funds_available) / sum(output_df['matched'])))
     all_matching_funds_available = full_matching_funds_available  > (output_df['matched'].sum())
     st.warning('The total matched funds exceed the available matching funds. Please talk to @umarkhaneth on telegram. \n'
                'Matching funds available: ' + '{:.0f}'.format(matching_funds_available * 10**matching_token_decimals) + '\n'
                'Total matched funds: ' + '{:.0f}'.format(output_df['matched'].sum()) + '\n'
-               'Difference: ' + str((output_df['matched'].sum() - matching_funds_available * 10**matchisng_token_decimals)))
-#st.header('Proceeding: ' + '{:.0f}'.format(output_df['matched'].sum()) + ' out of ' + '{:.0f}'.format(full_matching_funds_available))
+               'Difference: ' + str((output_df['matched'].sum() - matching_funds_available * 10**matching_token_decimals)))
+output_df['matched'] = output_df['matched'].apply(lambda x: int(x))
 
-# Add additional columns
-#output_df['matched'] = output_df['matched'].apply(lambda x: '{:.0f}'.format(x) if pd.notnull(x) else x)   
-output_df['totalReceived'] = output_df['totalReceived'].apply(lambda x: '{:.0f}'.format(x) if pd.notnull(x) else x)   
 
 
 output_df['sumOfSqrt'] = 0
@@ -389,11 +444,11 @@ output_df['capOverflow'] = 0
 output_df['matchedWithoutCap'] = 0
 output_df = output_df[['applicationId', 'projectId', 'projectName', 'payoutAddress', 'matchedUSD', 'totalReceived', 'contributionsCount', 'matched', 'sumOfSqrt', 'capOverflow', 'matchedWithoutCap']]
 
-
-st.write(output_df)
+display_df = output_df.applymap(int_to_str)
+st.write(display_df)
 st.download_button(
     label="⬇ Download Matching Distribution",
     data=output_df.to_csv(index=False),
-    file_name='output_data.csv',
+    file_name=f'matching_distribution.csv',
     mime='text/csv'
 )

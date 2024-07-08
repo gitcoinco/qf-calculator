@@ -116,7 +116,6 @@ def load_passport_model_scores(addresses):
     scores = scores[['address', 'rawScore', 'updated_at']]
     df = pd.concat([df, scores], ignore_index=True)
     df = df.sort_values('updated_at', ascending=False).drop_duplicates('address')
-
     return df
 
 @st.cache_resource(ttl=ttl_long)
@@ -225,7 +224,8 @@ def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['co
         10: "optimistic-ethereum",
         42161: "arbitrum-one",
         43114: "avalanche",
-        713715: "sei-network",
+        713715: "sei-devnet",
+        1329: "sei-mainnet"
     }
 
     native_tokens = {
@@ -235,6 +235,7 @@ def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['co
         42161: "ethereum",
         43114: "avalanche-2",
         713715: "sei-network",
+        1329: "sei-network"
     }
 
     if chain_id not in platforms:
@@ -272,9 +273,10 @@ def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['co
 
     if "error" in response_data:
         raise ValueError(f"Error from CoinGecko API: {response_data}")
-
+        
     if key not in response_data:
         raise ValueError(f"Token {'native' if is_native_token else 'address'} '{key}' not found in the response data.")
+        
 
     return response_data[key]["usd"]
 

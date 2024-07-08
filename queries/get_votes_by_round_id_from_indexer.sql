@@ -14,8 +14,8 @@ SELECT
     d.amount_in_usd as "amountUSD",
     d.amount_in_round_match_token
 FROM
-    "chain_data_66".donations d
-LEFT JOIN "chain_data_66".applications a 
+    "chain_data_70".donations d
+LEFT JOIN "chain_data_70".applications a 
   ON 
     a.round_id = d.round_id AND 
     a.chain_id = d.chain_id AND
