@@ -1,3 +1,4 @@
 
 .streamlit/secrets.toml
 testing.ipynb
+*.pyc

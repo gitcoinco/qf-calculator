@@ -424,19 +424,22 @@ display_df = output_df.applymap(int_to_str)
 
 
 full_matching_funds_available = int(matching_funds_available * 10**matching_token_decimals)
-output_df['matched'] = (output_df['matched'] * ((full_matching_funds_available-10) / sum(output_df['matched'])))
-all_matching_funds_available = full_matching_funds_available  > (output_df['matched'].sum())+9
-## IS THERE A CLEANER WAY THAN THIS WHILE NOT LOOP? 
-while not all_matching_funds_available:
-    full_matching_funds_available -= 10
-    output_df['matched'] = (output_df['matched'] * ((full_matching_funds_available) / sum(output_df['matched'])))
-    all_matching_funds_available = (int(matching_funds_available * 10**matching_token_decimals))  > (output_df['matched'].sum())
-    st.warning('The total matched funds exceed the available matching funds. Please talk to @umarkhaneth on telegram. \n'
-               'Matching funds available: ' + '{:.0f}'.format(matching_funds_available * 10**matching_token_decimals) + '\n'
-               'Total matched funds: ' + '{:.0f}'.format(output_df['matched'].sum()) + '\n'
-               'Difference: ' + str((output_df['matched'].sum() - matching_funds_available * 10**matching_token_decimals)))
-output_df['matched'] = output_df['matched'].apply(lambda x: int(x))
+matching_overflow = output_df['matched'].sum() - full_matching_funds_available
+if matching_overflow > 0:
+    matching_adjustment = int(matching_overflow / output_df['matched'].count()+1)
+    output_df['matched'] = output_df['matched']-matching_adjustment
+    output_df['matched'] = output_df['matched'].apply(lambda x: int(x))
 
+
+# SAFETY CHECK
+all_matching_funds_are_available = full_matching_funds_available  > (output_df['matched'].sum())
+if not all_matching_funds_are_available:
+    st.warning('The total matched funds exceed the available matching funds. Please talk to @umarkhaneth on telegram. \n'
+                'Matching funds available: ' + str(full_matching_funds_available) + '\n'
+               'Total matched funds: ' + str(output_df['matched'].sum()) + '\n'
+               'Difference: ' + str((output_df['matched'].sum() - full_matching_funds_available)))
+    output_df['matched'] = output_df['matched']-1
+    all_matching_funds_are_available = full_matching_funds_available  > (output_df['matched'].sum())
 
 
 output_df['sumOfSqrt'] = 0
