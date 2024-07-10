@@ -304,7 +304,7 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 
-st.header('💚 Quadratic Funding Results Comparison')
+st.header('💚 Quadratic Funding Method Comparison')
 st.write('''Quadratic funding helps us solve coordination failures by creating a way for community members to fund what matters to them while amplifying their impact. However, it's assumption that people make independent decisions can be exploited to unfairly influence the distribution of matching funds.
 
 Connection-oriented cluster-matching (COCM) doesn’t make this assumption. Instead, it quantifies just how coordinated groups of actors are likely to be based on the social signals they have in common. Projects backed by more independent agents receive greater matching funds. Conversely, if a project’s support network shows higher levels of coordination, the matching funds are reduced, encouraging self-organized solutions within more coordinated groups.
@@ -329,8 +329,8 @@ votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
 
 def get_matching(strategy, votes_df, matching_amount, suffix=None):
     df = fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_amount,cluster_df=votes_df)
-    df = df.rename(columns={'project_name': 'Project', 'matching_amount': f'{strategy} Match', 'matching_percent': f'{strategy} Match %'})
-    return df
+    df = df.rename(columns={'project_name': 'Project', 'matching_amount': f'{strategy} Match'})
+    return df[['Project', f'{strategy} Match']]
 
 strategies = ['COCM', 'QF']
 
@@ -353,14 +353,13 @@ matching_df['Project Page'] = 'https://explorer.gitcoin.co/#/round/' + matching_
 
 # Sort the dataframe by 'COCM Match' in descending order
 matching_df = matching_df.sort_values(by='COCM Match', ascending=False)
-
+matching_df['Δ Match'] = matching_df['COCM Match'] - matching_df['QF Match']
 # Configure the dataframe display
 column_config = {
     "Project": st.column_config.TextColumn("Project"),
     "COCM Match": st.column_config.NumberColumn("COCM Match", format="%.2f"),
     "QF Match": st.column_config.NumberColumn("QF Match", format="%.2f"),
-    "COCM Match %": st.column_config.NumberColumn("COCM Match %", format="%.2f"),
-    "QF Match %": st.column_config.NumberColumn("QF Match %", format="%.2f"),
+    "Δ Match": st.column_config.NumberColumn("Δ Match", format="%.2f"),
     "Project Page": st.column_config.LinkColumn("Project Page", display_text="Visit")
 }
 
@@ -388,7 +387,7 @@ st.markdown('Matching Values shown above are in **' + matching_token_symbol + '*
 
 
 
-st.subheader('⬇️ Download Matching Distribution')
+st.subheader('Select Matching Algorithm')
 # Let the user pick COCM or QF
 strategy_choice = st.selectbox(
     'Select the matching strategy to download:',
@@ -493,7 +492,7 @@ summary_df = summary_df.rename(columns={
 usd_columns = ['Matching Funds (USD)', 'Crowdfunding (USD)', 'Average Matching Per Voter (USD)', 'Matching Funds (' + matching_token_symbol + ')']
 for col in usd_columns:
     summary_df[col] = summary_df[col].map(lambda x: round(x, 2))
-
+summary_df = summary_df.sort_values('Matching Funds (' + matching_token_symbol + ')', ascending=True)
 st.write(summary_df)
 st.download_button(
     label="⬇ Download Summary",
@@ -503,7 +502,7 @@ st.download_button(
 )
 
 # Limit to top 10 projects by matchedUSD
-matching_by_projects = summary_df.sort_values('Matching Funds (' + matching_token_symbol + ')', ascending=True)
+matching_by_projects = summary_df
 
 # Create a pretty horizontal bar graph of matchedUSD and projectName
 fig = px.bar(
