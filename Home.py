@@ -59,6 +59,9 @@ def load_data():
     config_df = utils.fetch_tokens_config()
     config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
     matching_token_price = utils.fetch_latest_price(config_df['price_source_chain_id'].iloc[0], config_df['price_source_address'].iloc[0])
+    
+    #df = df[df['voter'] != '0x38467762af703e60b57d99b87543f07ef2b3319c']
+    
     unique_voters = df['voter'].drop_duplicates()
     scores, score_at_50_percent, score_at_100_percent, sybilDefense = load_scores_and_set_defense(chain_id, sybilDefense, unique_voters)
 
@@ -391,7 +394,6 @@ strategy_choice = st.selectbox(
     'Select the matching strategy to download:',
     ('COCM', 'QF')
 )
-st.write('You can upload this CSV to manager.gitcoin.co to apply the matching results to your round')
 
 # Filter the matching_df based on the selected strategy
 if strategy_choice == 'COCM':
@@ -455,3 +457,74 @@ st.download_button(
     file_name=f'matching_distribution.csv',
     mime='text/csv'
 )
+st.write('You can upload this CSV to manager.gitcoin.co to apply the matching results to your round')
+st.write('')
+st.header('📈 Sharable Summary ')
+
+# Create a summary table with initial columns
+summary_df = output_df[['projectName', 'matchedUSD']].copy()
+
+
+# Calculate unique voters and sum of crowdfunding
+voter_stats = df.groupby('project_name').agg(
+    uniqueVoters=('voter', 'nunique'),
+    crowdfundingUSD=('amountUSD', 'sum')
+).reset_index().rename(columns={'project_name': 'projectName'})
+
+# Merge unique voters into summary_df
+summary_df = summary_df.merge(voter_stats, on='projectName', how='left')
+summary_df = summary_df.merge(matching_df[['Project', 'Match', 'Project Page']], left_on='projectName', right_on='Project', how='left')
+summary_df.drop(columns=['Project'], inplace=True)
+# Calculate average matching per voter
+summary_df['averageMatchingPerVoter'] = summary_df['matchedUSD'] / summary_df['uniqueVoters']
+
+# Rename columns for clarity and order them correctly
+summary_df = summary_df.rename(columns={
+    'projectName': 'Project',
+    'Match': 'Matching Funds (' + matching_token_symbol + ')',
+    'matchedUSD': 'Matching Funds (USD)',
+    'crowdfundingUSD': 'Crowdfunding (USD)',
+    'uniqueVoters': 'Unique Voters',
+    'averageMatchingPerVoter': 'Average Matching Per Voter (USD)',
+})[['Project', 'Matching Funds (' + matching_token_symbol + ')', 'Matching Funds (USD)', 'Crowdfunding (USD)', 'Unique Voters', 'Average Matching Per Voter (USD)', 'Project Page']]
+
+
+# Ensure all USD columns have exactly two digits after the decimal
+usd_columns = ['Matching Funds (USD)', 'Crowdfunding (USD)', 'Average Matching Per Voter (USD)', 'Matching Funds (' + matching_token_symbol + ')']
+for col in usd_columns:
+    summary_df[col] = summary_df[col].map(lambda x: round(x, 2))
+
+st.write(summary_df)
+st.download_button(
+    label="⬇ Download Summary",
+    data=summary_df.to_csv(index=False),
+    file_name=f'round_summary.csv',
+    mime='text/csv'
+)
+
+# Limit to top 10 projects by matchedUSD
+matching_by_projects = summary_df.sort_values('Matching Funds (' + matching_token_symbol + ')', ascending=True)
+
+# Create a pretty horizontal bar graph of matchedUSD and projectName
+fig = px.bar(
+    matching_by_projects,
+    x='Matching Funds (' + matching_token_symbol + ')',
+    y='Project',
+    orientation='h',
+    title='Matching Funds Distribution',
+    labels={'Matching Funds (' + matching_token_symbol + ')': 'Matched Funds', 'Project': 'Project'},
+    text=matching_by_projects['Matching Funds (' + matching_token_symbol + ')'].apply(lambda x: f"{x/1000:.1f}k" if x >= 1000 else f"{x:.0f}")
+)
+
+# Update layout for better appearance
+fig.update_layout(
+    xaxis_title='',
+    yaxis_title='',
+    yaxis=dict(tickmode='linear'),
+    template='plotly_white',
+    height=1640,
+    width=800
+)
+
+# Display the bar graph
+st.plotly_chart(fig)
