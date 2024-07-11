@@ -38,7 +38,7 @@ def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
         sybilDefense = 'None'
     return scores, score_at_50_percent, score_at_100_percent, sybilDefense
 
-def load_data(): 
+def load_data(csv=None): 
     blockchain_mapping = {
             1: "Ethereum",
             10: "Optimism",
@@ -56,6 +56,18 @@ def load_data():
     token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
     sybilDefense = rounds['sybil_defense'].values[0] if 'sybil_defense' in rounds else 'None'
     df = utils.get_round_votes(round_id, chain_id)
+    if csv is not None:
+        csv['address'] = csv['address'].str.lower()
+        df['voter'] = df['voter'].str.lower()
+        df['flagged'] = df['voter'].isin(csv['address'])
+        flagged_votes_count = df["flagged"].sum()
+        unique_flagged_voters_count = df[df['flagged']]['voter'].nunique()
+        
+        st.markdown(f"**Flagged Votes:** {flagged_votes_count}")
+        st.markdown(f"**Unique Flagged Voters:** {unique_flagged_voters_count}")
+        filter_flagged = st.toggle('Filter out flagged votes')
+        if filter_flagged:
+            df = df[~df['flagged']]
     config_df = utils.fetch_tokens_config()
     config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
     matching_token_price = utils.fetch_latest_price(config_df['price_source_chain_id'].iloc[0], config_df['price_source_address'].iloc[0])
@@ -101,8 +113,18 @@ else:
     round_id = st.session_state.round_id.lower()
     chain_id = int(st.session_state.chain_id)
 
+st.image('657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width = 300)
+with st.expander("Advanced: Filter Out Wallets"):
+    st.write('Upload a CSV file with a single column named "address" containing the ETH addresses to filter out. Addresses should include the 0x prefix.')
+    uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
+    if uploaded_file is not None:
+        csv = pd.read_csv(uploaded_file)
+        st.write("CSV file uploaded successfully. Here's a preview:")
+        st.write(csv.head())
+        data = load_data(csv)
+    else:
+        data = load_data()
 
-data = load_data()
 blockchain_mapping = data["blockchain_mapping"]
 rounds = data["rounds"]
 df = data["df"]
@@ -121,8 +143,8 @@ token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
 chain = blockchain_mapping.get(rounds['chain_id'].values[0] if 'chain_id' in rounds else 1)
 
 
-st.image('657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width = 300)
 st.title(f'{round_name} - Matching Results')
+
 matching_amount = rounds['matching_funds_available'].astype(float).values[0]
 
 ## LOAD TOKEN DATA 
