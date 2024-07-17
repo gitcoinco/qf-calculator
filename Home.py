@@ -114,7 +114,7 @@ else:
     chain_id = int(st.session_state.chain_id)
 
 st.image('657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width = 300)
-with st.expander("Advanced: Filter Out Wallets"):
+with st.expander("Advanced: Filter Out Wallets", expanded=False):
     st.write('Upload a CSV file with a single column named "address" containing the ETH addresses to filter out. Addresses should include the 0x prefix.')
     uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
     if uploaded_file is not None:
@@ -124,6 +124,11 @@ with st.expander("Advanced: Filter Out Wallets"):
         data = load_data(csv)
     else:
         data = load_data()
+
+with st.expander("Advanced: Overide Matching Funds Available", expanded=False):
+    matching_funds_available = st.number_input("Matching Funds Available", value=data["rounds"]['matching_funds_available'].astype(float).values[0], format="%.2f")
+    data["rounds"]['matching_funds_available'] = matching_funds_available
+
 
 blockchain_mapping = data["blockchain_mapping"]
 rounds = data["rounds"]
@@ -342,6 +347,7 @@ st.write('')
 
 
 
+
 # Calculate matching results with passport on
 df_with_passport = fundingutils.apply_voting_eligibility(df.copy(), min_donation_threshold_amount, score_at_50_percent, score_at_100_percent)
 votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
@@ -448,10 +454,14 @@ display_df = output_df.applymap(int_to_str)
 
 full_matching_funds_available = int(matching_funds_available * 10**matching_token_decimals)
 matching_overflow = output_df['matched'].sum() - full_matching_funds_available
+st.header('Matching Overflow is ' + str(matching_overflow) + ' ' + matching_token_symbol)
 if matching_overflow > 0:
+    st.header('Matching Overflow Detected. Adjusting Matching Funds')
     matching_adjustment = int(matching_overflow / output_df['matched'].count()+1)
     output_df['matched'] = output_df['matched']-matching_adjustment
     output_df['matched'] = output_df['matched'].apply(lambda x: int(x))
+    matching_overflow = output_df['matched'].sum() - full_matching_funds_available
+    st.write('Adjusted Matching Overflow is ' + str(matching_overflow) + ' ' + matching_token_symbol)
 
 
 # SAFETY CHECK
@@ -485,36 +495,24 @@ st.header('📈 Sharable Summary ')
 # Create a summary table with initial columns
 summary_df = output_df[['projectName', 'matchedUSD']].copy()
 
-
-# Calculate unique voters and sum of crowdfunding
-voter_stats = df.groupby('project_name').agg(
-    uniqueVoters=('voter', 'nunique'),
-    crowdfundingUSD=('amountUSD', 'sum')
-).reset_index().rename(columns={'project_name': 'projectName'})
-
-# Merge unique voters into summary_df
-summary_df = summary_df.merge(voter_stats, on='projectName', how='left')
+# Merge matching data and project page into summary_df
 summary_df = summary_df.merge(matching_df[['Project', 'Match', 'Project Page']], left_on='projectName', right_on='Project', how='left')
 summary_df.drop(columns=['Project'], inplace=True)
-# Calculate average matching per voter
-summary_df['averageMatchingPerVoter'] = summary_df['matchedUSD'] / summary_df['uniqueVoters']
 
 # Rename columns for clarity and order them correctly
 summary_df = summary_df.rename(columns={
     'projectName': 'Project',
     'Match': 'Matching Funds (' + matching_token_symbol + ')',
     'matchedUSD': 'Matching Funds (USD)',
-    'crowdfundingUSD': 'Crowdfunding (USD)',
-    'uniqueVoters': 'Unique Voters',
-    'averageMatchingPerVoter': 'Average Matching Per Voter (USD)',
-})[['Project', 'Matching Funds (' + matching_token_symbol + ')', 'Matching Funds (USD)', 'Crowdfunding (USD)', 'Unique Voters', 'Average Matching Per Voter (USD)', 'Project Page']]
-
+    'Project Page': 'Project Page'
+})[['Project', 'Matching Funds (' + matching_token_symbol + ')', 'Matching Funds (USD)', 'Project Page']]
 
 # Ensure all USD columns have exactly two digits after the decimal
-usd_columns = ['Matching Funds (USD)', 'Crowdfunding (USD)', 'Average Matching Per Voter (USD)', 'Matching Funds (' + matching_token_symbol + ')']
+usd_columns = ['Matching Funds (USD)', 'Matching Funds (' + matching_token_symbol + ')']
 for col in usd_columns:
     summary_df[col] = summary_df[col].map(lambda x: round(x, 2))
-summary_df = summary_df.sort_values('Matching Funds (' + matching_token_symbol + ')', ascending=True)
+
+summary_df = summary_df.sort_values('Matching Funds (' + matching_token_symbol + ')', ascending=False)
 st.write(summary_df)
 st.download_button(
     label="⬇ Download Summary",
@@ -524,7 +522,8 @@ st.download_button(
 )
 
 # Limit to top 10 projects by matchedUSD
-matching_by_projects = summary_df
+matching_by_projects = summary_df.sort_values('Matching Funds (' + matching_token_symbol + ')', ascending=True)
+
 
 # Create a pretty horizontal bar graph of matchedUSD and projectName
 fig = px.bar(
