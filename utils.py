@@ -11,9 +11,8 @@ import time
 ttl_short = 900 # 15 minutes
 ttl_long = 36000 # 10 hours
 
-
 def run_query(query):
-    """Run query and return results"""
+    """Run a query on the indexer database and return results as a DataFrame."""
     try:
         conn = pg.connect(host=st.secrets["indexer"]["host"], 
                            port=st.secrets["indexer"]["port"], 
@@ -31,6 +30,7 @@ def run_query(query):
     return results
 
 def run_query_with_params(query, params, database="indexer"):
+    """Run a parameterized query on the specified database and return results as a DataFrame."""
     conn = pg.connect(host=st.secrets[database]["host"], 
                            port=st.secrets[database]["port"], 
                            dbname=st.secrets[database]["dbname"], 
@@ -44,8 +44,8 @@ def run_query_with_params(query, params, database="indexer"):
     conn.close()
     return results
 
-
 def load_data_from_url(url):
+    """Load JSON data from a given URL and return as a list of dictionaries."""
     try:
         response = requests.get(url, stream=True)
         response.raise_for_status()  # Raise an error for bad responses
@@ -60,6 +60,7 @@ def load_data_from_url(url):
 
 @st.cache_resource(ttl=0)
 def get_round_summary():
+    """Fetch and return a summary of all rounds from the indexer."""
     sql_query_file = 'queries/get_rounds_summary_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
         query = file.read()
@@ -68,6 +69,7 @@ def get_round_summary():
 
 @st.cache_resource(ttl=ttl_short)
 def get_round_votes(round_id, chain_id):
+    """Fetch and return votes for a specific round and chain."""
     sql_query_file = 'queries/get_votes_by_round_id_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
         query = file.read()
@@ -75,11 +77,12 @@ def get_round_votes(round_id, chain_id):
         'round_id': round_id,
         'chain_id': chain_id
     }
-    results = run_query_with_params(query, params)  # Ensure your run_query can handle parameterized inputs
+    results = run_query_with_params(query, params)
     return results
 
 @st.cache_resource(ttl=ttl_short)
 def get_projects_in_round(round_id, chain_id):
+    """Fetch and return projects for a specific round and chain."""
     sql_query_file = 'queries/get_projects_summary_from_indexer.sql'
     with open(sql_query_file, 'r') as file:
         query = file.read()
@@ -90,9 +93,9 @@ def get_projects_in_round(round_id, chain_id):
     results = run_query_with_params(query, params)
     return results
 
-    
 @st.cache_resource(ttl=ttl_long) 
 def load_passport_model_scores(addresses):
+    """Load and process passport model scores for given addresses."""
     url = 'https://public.scorer.gitcoin.co/eth_model_scores_v2/eth_model_scores.jsonl'
     scores = load_data_from_url(url)
     scores = pd.DataFrame(scores)
@@ -100,12 +103,12 @@ def load_passport_model_scores(addresses):
         scores[key] = scores['data'].apply(lambda x: x.get(key, np.nan))
     scores.drop('data', axis=1, inplace=True)
     
-   # scores = scores.join(pd.json_normalize(scores['data'])).drop('data', axis=1)
     scores['address'] = scores['address'].str.lower()
     scores = scores[scores['address'].isin(addresses)]
     scores['score'] = scores['score'].astype(float)
     scores['rawScore'] = scores['score']
 
+    # Load additional scores from CSV file
     df = pd.read_csv('data/gg20_missing_addresses_scores.csv')
     df.rename(columns={'scores': 'rawScore'}, inplace=True)
     df = df[df['address'].isin(addresses)]
@@ -118,6 +121,7 @@ def load_passport_model_scores(addresses):
 
 @st.cache_resource(ttl=ttl_long)
 def load_avax_scores(addresses):
+    """Load and process Avalanche scores for given addresses."""
     url = 'https://public.scorer.gitcoin.co/passport_scores/6608/registry_score.jsonl'
     scores = load_data_from_url(url)
     scores = pd.DataFrame(scores)
@@ -133,6 +137,7 @@ def load_avax_scores(addresses):
 
 @st.cache_resource(ttl=ttl_long)
 def load_stamp_scores(addresses):
+    """Load and process passport stamp scores for given addresses."""
     addresses = tuple(addresses)
     sql_query_file = 'queries/get_passport_stamps.sql'
     with open(sql_query_file, 'r') as file:
@@ -143,33 +148,26 @@ def load_stamp_scores(addresses):
     results = run_query_with_params(query, params, database="grants")  
     return results
 
-
 def parse_config_file(file_content):
+    """Parse the config file content and extract token information."""
     data = []
     chain_pattern = re.compile(r'{\s*id:\s*(\d+),\s*name:\s*"([^"]+)",.*?tokens:\s*\[(.*?)\].*?}', re.DOTALL)
     token_pattern = re.compile(r'code:\s*"(?P<code>[^"]+)".*?address:\s*"(?P<address>[^"]+)".*?decimals:\s*(?P<decimals>\d+).*?priceSource:\s*{\s*chainId:\s*(?P<price_source_chain_id>\d+).*?address:\s*"(?P<price_source_address>[^"]+)"', re.DOTALL)
     chain_matches = chain_pattern.findall(file_content)
-    print(f"Number of chain matches: {len(chain_matches)}")
 
     for chain_match in chain_matches:
         chain_id = int(chain_match[0])
         chain_name = chain_match[1]
         token_data = chain_match[2]
 
-        #print(f"Chain ID: {chain_id}, Chain Name: {chain_name}")
-        #print(f"Token Data: {token_data}")
-
         token_matches = token_pattern.finditer(token_data)
 
         for token_match in token_matches:
-            #print(f"Token Match: {token_match.group()}")
             token_code = token_match.group('code')
             token_address = token_match.group('address')
             token_decimals = int(token_match.group('decimals'))
             price_source_chain_id = int(token_match.group('price_source_chain_id'))
             price_source_address = token_match.group('price_source_address')
-
-            #print(f"Token Code: {token_code}, Token Address: {token_address}")
 
             data.append([
                 chain_id,
@@ -180,7 +178,7 @@ def parse_config_file(file_content):
                 price_source_chain_id,
                 price_source_address
             ])
-    #print(f"Data: {data}")
+
     if data:
         columns = [
             'chain_id',
@@ -201,6 +199,7 @@ def parse_config_file(file_content):
     
 @st.cache_resource(ttl=ttl_long)
 def fetch_tokens_config():
+    """Fetch and parse the token configuration from the GitHub repository."""
     url = 'https://raw.githubusercontent.com/gitcoinco/grants-stack-indexer/main/src/config.ts'
     
     try:
@@ -213,9 +212,9 @@ def fetch_tokens_config():
     df = parse_config_file(response.text)
     return df
 
-
 @st.cache_resource(ttl=ttl_long)
 def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['coingecko']['COINGECKO_API_KEY'], coingecko_api_url="https://api.coingecko.com/api/v3"):
+    """Fetch the latest price for a given token on a specific chain."""
     platforms = {
         1: "ethereum",
         250: "fantom",
@@ -275,6 +274,4 @@ def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['co
     if key not in response_data:
         raise ValueError(f"Token {'native' if is_native_token else 'address'} '{key}' not found in the response data.")
         
-
     return response_data[key]["usd"]
-
