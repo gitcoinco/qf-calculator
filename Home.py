@@ -36,11 +36,11 @@ def validate_input():
 @st.cache_resource(ttl=36000)
 def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
     """Load scores and set Sybil defense parameters based on chain and defense type."""
-    if chain_id == 43114: 
+    if chain_id == 43114:  # AVALANCHE 
         scores = utils.load_avax_scores(unique_voters)
         score_at_50_percent = score_at_100_percent = 25
         sybilDefense = 'Avalanche Passport'
-    elif sybilDefense == 'true':
+    elif sybilDefense == 'true': 
         scores = utils.load_stamp_scores(unique_voters)
         score_at_50_percent, score_at_100_percent = 15, 25
         sybilDefense = 'Passport Stamps'
@@ -317,7 +317,7 @@ def prepare_output_dataframe(matching_df, strategy_choice, data):
 
 def adjust_matching_overflow(output_df, matching_funds_available, matching_token_decimals):
     """Adjust matching funds if there's an overflow."""
-    full_matching_funds_available = int(matching_funds_available * 10**matching_token_decimals)
+    full_matching_funds_available = int(int(matching_funds_available) * 10**(int(matching_token_decimals)))
     matching_overflow = sum(int(x) for x in output_df['matched']) - full_matching_funds_available
     
     if matching_overflow >= 0:
@@ -325,7 +325,7 @@ def adjust_matching_overflow(output_df, matching_funds_available, matching_token
         matching_adjustment = int(matching_overflow / max(output_df['matched'].count(), 1))
         output_df['matched'] = output_df['matched'].apply(lambda x: str(max(int(x) - matching_adjustment, 0)))
         matching_overflow = sum(int(x) for x in output_df['matched']) - full_matching_funds_available
-        st.warning(f'Adjusted Matching Overflow is {matching_overflow}')
+        st.warning(f'Adjusted Matching Overflow is {matching_overflow}') # IF THIS NUMBER IS NEGATIVE WE ARE GOOD TO GO
     
     return output_df
 
