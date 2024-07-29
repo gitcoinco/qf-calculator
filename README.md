@@ -79,7 +79,7 @@ This project is configured for deployment on Fly.io. Here are the steps to deplo
    fly deploy
    ```
 
-5. Once deployed, you can access your app at `https://your-app-name.fly.dev`
+5. Once deployed, you can access your app at `https://qf-calculator.fly.dev`
 
 Remember to set up your environment variables and secrets in the Fly.io dashboard or using the Fly CLI before deployment.
 
