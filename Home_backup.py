@@ -9,7 +9,7 @@ import fundingutils
 
 st.set_page_config(
     page_title="Matching Results",
-    page_icon="favicon.png",
+    page_icon="assets/favicon.png",
     layout="wide",
 )
 
@@ -116,7 +116,7 @@ def load_data(csv=None):
 
 
 
-st.image('657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width = 300)
+st.image('assets/657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width = 300)
 with st.expander("Advanced: Filter Out Wallets", expanded=False):
     st.write('Upload a CSV file with a single column named "address" containing the ETH addresses to filter out. Addresses should include the 0x prefix.')
     uploaded_file = st.file_uploader("Upload a CSV file", type="csv")

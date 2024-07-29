@@ -7,7 +7,7 @@ import utils
 import fundingutils
 
 # Page configuration
-st.set_page_config(page_title="Matching Results", page_icon="favicon.png", layout="wide")
+st.set_page_config(page_title="Matching Results", page_icon="assets/favicon.png", layout="wide")
 
 # Session state initialization
 if 'round_id' not in st.session_state:
@@ -57,7 +57,7 @@ def load_data(round_id, chain_id, csv=None):
                           324: "ZKSync", 8453: "Base", 42161: "Arbitrum", 43114: "Avalanche",
                           534352: "Scroll", 1329: "SEI"}
     rounds = utils.get_round_summary()
-    rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)]
+    rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)] # FILTER BY ROUND_ID AND CHAIN_ID
     token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
     sybilDefense = rounds['sybil_defense'].values[0] if 'sybil_defense' in rounds else 'None'
     df = utils.get_round_votes(round_id, chain_id)
@@ -104,7 +104,8 @@ def process_csv(df, csv):
     return df
 
 def display_round_settings(data):
-    st.header('⚙️ Round Settings')
+    st.title(f" {data['rounds']['round_name'].values[0]}: Matching Results")
+    st.header(f"⚙️ Round Settings")
     col1, col2 = st.columns(2)
     col1.write(f"**Chain:** {data['blockchain_mapping'][data['chain_id']]}")
     col1.write(f"**Matching Cap:** {data['rounds']['matching_cap_amount'].values[0]:.2f}%")
@@ -156,12 +157,6 @@ def handle_wallet_filtering():
         return csv
     return None
 
-def handle_matching_funds_override(rounds):
-    matching_funds_available = st.number_input("Matching Funds Available", 
-                                               value=rounds['matching_funds_available'].astype(float).values[0], 
-                                               format="%.2f")
-    rounds['matching_funds_available'] = matching_funds_available
-    return rounds
 
 def calculate_verified_vs_unverified(scores, donations_df, score_threshold):
     verified_mask = scores['rawScore'] >= score_threshold
@@ -331,6 +326,7 @@ def display_matching_distribution(output_df):
         mime='text/csv'
     )
     st.write('You can upload this CSV to manager.gitcoin.co to apply the matching results to your round')
+    st.header(f'The value of the sum of the matched column is {output_df["matched"].sum()}')
 
 def create_summary_dataframe(output_df, matching_df, token_code):
     summary_df = output_df[['projectName', 'matchedUSD']].copy()
@@ -364,8 +360,9 @@ def display_summary(summary_df):
     )
 
 def create_matching_distribution_chart(summary_df, token_symbol):
+    summary_df = summary_df.sort_values(f'Matching Funds ({token_symbol})', ascending=True)
     fig = px.bar(
-        summary_df.sort_values(f'Matching Funds ({token_symbol})', ascending=True),
+        summary_df,
         x=f'Matching Funds ({token_symbol})',
         y='Project',
         orientation='h',
@@ -384,7 +381,7 @@ def create_matching_distribution_chart(summary_df, token_symbol):
     return fig
 
 def main():
-    st.image('657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width=300)
+    st.image('assets/657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width=300)
     
     round_id, chain_id = validate_input()
     
@@ -392,9 +389,6 @@ def main():
         csv = handle_wallet_filtering()
 
     data = load_data(round_id, chain_id, csv)
-
-    with st.expander("Advanced: Override Matching Funds Available", expanded=False):
-        data['rounds'] = handle_matching_funds_override(data['rounds'])
 
     display_round_settings(data)
 
@@ -421,7 +415,7 @@ def main():
     st.subheader('Download Matching Distribution')
     strategy_choice = select_matching_strategy()
     output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
-    output_df = adjust_matching_overflow(output_df, data['rounds']['matching_funds_available'].values[0], data['config_df']['token_decimals'].iloc[0])
+    #output_df = adjust_matching_overflow(output_df, data['rounds']['matching_funds_available'].values[0], data['config_df']['token_decimals'].iloc[0])
     
     display_matching_distribution(output_df)
 
