@@ -16,7 +16,7 @@ def display_round_statistics(df):
     """Display some statistics for the current round."""
     st.subheader(f"Round Stats")
     col1, col2 = st.columns(2)
-    col1.write(f"**Total Amount Raised:** ${df['amount'].sum():,.2f}")
+    col1.write(f"**Total Amount Raised:** {df['amount'].sum():,.2f}")
     col1.write(f"**Number of Unique Voters:** {df['voter'].nunique()}")
     col2.write(f"**Number of Unique Projects:** {df['project_name'].nunique()}")
     col2.write(f"**Avg. Projects per Voter:** {df.groupby('voter')['project_name'].nunique().mean():.2f}")
@@ -293,14 +293,7 @@ def main():
         step=100.0,
         format="%.2f"
     )
-    matching_token_price = col2.number_input(
-        'Matching Token Price in USD',
-        min_value=0.0,
-        value=1.0,
-        step=0.01,
-        format="%.2f"
-    )
-    matching_cap = col1.number_input(
+    matching_cap = col2.number_input(
         'Matching Cap (%)',
         min_value=0.0,
         max_value=100.0,
@@ -345,34 +338,60 @@ def main():
     percent_redistributed = total_delta_sum / matching_funds_available
     st.metric("Percent of Matching Funds Redistributed", f"{percent_redistributed:.2%}")
 
-    zuzalu_q1_results = {
-        'tech_redistribution_amount': 11.77,
-        'tech_redistribution_percent': .1410,
-        'events_redistribution_amount': 73.92,
-        'events_redistribution_percent': .4439,
-        'token': 'ETH'
-    }
+    zuzalu_q1_results = pd.read_csv('data/zuzalu_q1_redistributions.csv')
+    filtered_results = zuzalu_q1_results[(zuzalu_q1_results['voter_set'] == 'All') & (zuzalu_q1_results['algo'] == 'COCM')]
+    tech_redistribution_pct = filtered_results[filtered_results['round'] == 'Tech']['pct'].iloc[0]
+    events_redistribution_pct = filtered_results[filtered_results['round'] == 'Events']['pct'].iloc[0]
 
-    st.subheader('The Zuzalu Q1 results using COCM were:')
-    col1, col2 = st.columns(2)
-    col1.metric("Tech Redistribution Amount", f"{zuzalu_q1_results['tech_redistribution_amount']:.2f} ETH")
-    col1.metric("Tech Redistribution Percent", f"{zuzalu_q1_results['tech_redistribution_percent']:.2%}")
-    col2.metric("Events Redistribution Amount", f"{zuzalu_q1_results['events_redistribution_amount']:.2f} ETH")
-    col2.metric("Events Redistribution Percent", f"{zuzalu_q1_results['events_redistribution_percent']:.2%}")
+    poap_results = zuzalu_q1_results[(zuzalu_q1_results['voter_set'] == 'Zupass') & (zuzalu_q1_results['algo'] == 'COCM')]
+    poap_tech_redistribution_pct = poap_results[poap_results['round'] == 'Tech']['pct'].iloc[0]
+    poap_events_redistribution_pct = poap_results[poap_results['round'] == 'Events']['pct'].iloc[0]
+    
+    st.write('')
+    st.write('To better understand how strong of an effect COCM would have on the results of this round, the below graph vizualizes how this redistribution amount compares to Zuzalu Q1 Rounds.')
+
+    fig = go.Figure(data=[
+        go.Bar(name='All Voters', x=['Tech', 'Events'], y=[tech_redistribution_pct * 100, events_redistribution_pct * 100]),
+        go.Bar(name='Zupass Voters', x=['Tech', 'Events'], y=[poap_tech_redistribution_pct * 100, poap_events_redistribution_pct * 100])
+    ])
+
+    fig.add_shape(
+        type='line',
+        x0=-0.5,
+        y0=percent_redistributed * 100,
+        x1=1.5,
+        y1=percent_redistributed * 100,
+        line=dict(
+            color='Red',
+            width=2,
+            dash='dashdot'
+        ),
+        name='This Round'
+    )
+
+    fig.update_layout(
+        title='Zuzalu Q1 Redistribution Percentages',
+        xaxis_title='Voter Set',
+        yaxis_title='Redistribution Percent',
+        barmode='group'
+    )
+
+    fig.add_annotation(
+        x=0.5,
+        y=percent_redistributed * 100,
+        text=f'This Round: {percent_redistributed * 100:.2f}%',
+        showarrow=True,
+        arrowhead=1,
+        font=dict(color='red')
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
     
     st.subheader('Comparing the Zuzalu Q1 redistribution to the results of this round:')
-    tech_redistribution_diff = percent_redistributed - zuzalu_q1_results['tech_redistribution_percent']
-    events_redistribution_diff = percent_redistributed - zuzalu_q1_results['events_redistribution_percent']
+    tech_redistribution_diff = percent_redistributed - tech_redistribution_pct
+    events_redistribution_diff = percent_redistributed - events_redistribution_pct
 
-    if tech_redistribution_diff < 0:
-        st.subheader(f"We have {abs(tech_redistribution_diff):.2%} more collusion-like behavior than the Zuzalu Q1 tech round.")
-    else:
-        st.subheader(f"We have {abs(tech_redistribution_diff):.2%} less collusion-like behavior than the Zuzalu Q1 tech round.")
-
-    if events_redistribution_diff < 0:
-        st.subheader(f"We have {abs(events_redistribution_diff):.2%} more collusion-like behavior than the Zuzalu Q1 events round.")
-    else:
-        st.subheader(f"We have {abs(events_redistribution_diff):.2%} less collusion-like behavior than the Zuzalu Q1 events round.")
+   
     # Visualize the difference between QF and COCM
     st.subheader('📊 Top Voter Overlaps per Pair of Project')
     st.write('If there is collusion-like behavior, can we identify where its strongest?')

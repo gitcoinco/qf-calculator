@@ -1,0 +1,9 @@
+round,voter_set,algo,amount,pct
+Events,All,COCM,81.15,0.4873873874
+Events,Zupass,COCM,85.44,0.5131531532
+Events,All,Pairwise,67.889,0.4077417417
+Events,Zupass,Pairwise,22.517,0.1352372372
+Tech,All,COCM,14.36,0.1719760479
+Tech,Zupass,COCM,30.18,0.3614371257
+Tech,All,Pairwise,8.393,0.1005149701
+Tech,Zupass,Pairwise,39.142,0.4687664671
