@@ -25,7 +25,6 @@ def display_crowdfunding_stats(df, matching_funds_available):
     """Display crowdfunding statistics and metrics."""
     st.header('👥 Crowdfunding')
     crowd_raised = df['amount'].sum()
-    st.subheader(f"{crowd_raised:,.2f} crowdfunded is {(crowd_raised / matching_funds_available) * 100:.2f}% of the {matching_funds_available:,.2f} matching pool")
     
     grouped_voter_data = df.groupby('voter')['amount'].agg(['sum', 'mean', 'median', 'max']).reset_index()
     
