@@ -7,135 +7,32 @@ import utils
 import fundingutils
 
 # Page configuration
-st.set_page_config(page_title="Matching Results", page_icon="assets/favicon.png", layout="wide")
+st.set_page_config(page_title="Matching Results Calculator", page_icon="assets/favicon.png", layout="centered")
 
-# Initialize session state variables
-if 'round_id' not in st.session_state:
-    st.session_state.round_id = None
-if 'chain_id' not in st.session_state:
-    st.session_state.chain_id = None
 
-# Handle URL parameters for round_id and chain_id
-query_params_round_id = st.query_params.get_all('round_id')
-if len(query_params_round_id) == 1 and not st.session_state.round_id:
-    st.session_state.round_id = query_params_round_id[0]
 
-query_params_chain_id = st.query_params.get_all('chain_id')
-if len(query_params_chain_id) == 1 and not st.session_state.chain_id:
-    st.session_state.chain_id = query_params_chain_id[0]
 
-def validate_input():
-    """Validate the presence of round_id and chain_id in the URL."""
-    if st.session_state.round_id is None or st.session_state.chain_id is None:
-        st.header("Oops! Something went wrong. You're not supposed to be here 🙈")
-        st.subheader("Please provide round_id and chain_id in the URL")
-        st.subheader('Example: https://qf-calculator.fly.dev/?round_id=23&chain_id=42161')
-        st.stop()
-    return st.session_state.round_id.lower(), int(st.session_state.chain_id)
-
-@st.cache_resource(ttl=36000)
-def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
-    """Load scores and set Sybil defense parameters based on chain and defense type."""
-    if chain_id == 43114:  # AVALANCHE 
-        scores = utils.load_avax_scores(unique_voters)
-        score_at_50_percent = score_at_100_percent = 25
-        sybilDefense = 'Avalanche Passport'
-    elif sybilDefense == 'true': 
-        scores = utils.load_stamp_scores(unique_voters)
-        score_at_50_percent, score_at_100_percent = 15, 25
-        sybilDefense = 'Passport Stamps'
-    elif sybilDefense == 'passport-mbds':
-        scores = utils.load_passport_model_scores(unique_voters)
-        score_at_50_percent, score_at_100_percent = 1, 25
-        sybilDefense = 'Passport Model Based Detection System'
-    else:
-        # If no Sybil defense is set, assign a default score of 1 to all voters
-        scores = pd.DataFrame({'address': unique_voters, 'rawScore': 1})
-        score_at_50_percent = score_at_100_percent = 0
-        sybilDefense = 'None'
-    return scores, score_at_50_percent, score_at_100_percent, sybilDefense
-
-def load_data(round_id, chain_id, csv=None):
-    """Load and process data for the specified round and chain."""
-    blockchain_mapping = {1: "Ethereum", 10: "Optimism", 137: "Polygon", 250: "Fantom",
-                          324: "ZKSync", 8453: "Base", 42161: "Arbitrum", 43114: "Avalanche",
-                          534352: "Scroll", 1329: "SEI"}
-    rounds = utils.get_round_summary()
-    rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)] # FILTER BY ROUND_ID AND CHAIN_ID
-    token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
-    sybilDefense = rounds['sybil_defense'].values[0] if 'sybil_defense' in rounds else 'None'
-    df = utils.get_round_votes(round_id, chain_id)
-    
-    if csv is not None:
-        df = process_csv(df, csv)
-    
-    # Fetch token configuration and price
-    config_df = utils.fetch_tokens_config()
-    config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
-    matching_token_price = utils.fetch_latest_price(config_df['price_source_chain_id'].iloc[0], config_df['price_source_address'].iloc[0])
-    
-    unique_voters = df['voter'].unique()
-    scores, score_at_50_percent, score_at_100_percent, sybilDefense = load_scores_and_set_defense(chain_id, sybilDefense, unique_voters)
-    
-    # Merge scores with the main dataframe
-    df = pd.merge(df, scores[['address', 'rawScore']], left_on='voter', right_on='address', how='left')
-    df['rawScore'] = df['rawScore'].fillna(0)  # Fill NaN values with 0 for voters without a score
-    
-    return {
-        "blockchain_mapping": blockchain_mapping,
-        "rounds": rounds,
-        "df": df,
-        "config_df": config_df,
-        "matching_token_price": matching_token_price,
-        "scores": scores,
-        "score_at_50_percent": score_at_50_percent,
-        "score_at_100_percent": score_at_100_percent,
-        "sybilDefense": sybilDefense,
-        "chain_id": chain_id
-    }
-
-def process_csv(df, csv):
-    """Process uploaded CSV file for wallet filtering."""
-    csv['address'] = csv['address'].str.lower()
-    df['voter'] = df['voter'].str.lower()
-    df['flagged'] = df['voter'].isin(csv['address'])
-    flagged_votes_count = df["flagged"].sum()
-    unique_flagged_voters_count = df[df['flagged']]['voter'].nunique()
-    
-    st.markdown(f"**Flagged Votes:** {flagged_votes_count}")
-    st.markdown(f"**Unique Flagged Voters:** {unique_flagged_voters_count}")
-    filter_flagged = st.toggle('Filter out flagged votes')
-    if filter_flagged:
-        df = df[~df['flagged']]
-    return df
-
-def display_round_settings(data):
-    """Display the settings and statistics for the current round."""
-    st.title(f" {data['rounds']['round_name'].values[0]}: Matching Results")
-    st.header(f"⚙️ Round Settings")
+def display_round_statistics(df):
+    """Display some statistics for the current round."""
+    st.subheader(f"Round Stats")
     col1, col2 = st.columns(2)
-    col1.write(f"**Chain:** {data['blockchain_mapping'][data['chain_id']]}")
-    col1.write(f"**Matching Cap:** {data['rounds']['matching_cap_amount'].values[0]:.2f}%")
-    col1.write(f"**Passport Defense Selected:** {data['sybilDefense']}")
-    col1.write(f"**Number of Unique Voters:** {data['df']['voter'].nunique()}")
-    col2.write(f"**Matching Available:** {data['rounds']['matching_funds_available'].values[0]:.2f} {data['config_df']['token_code'].iloc[0]}")
-    col2.write(f"**Matching Token Price:** ${data['matching_token_price']:.2f}")
-    col2.write(f"**Minimum Donation Threshold Amount:** ${data['rounds'].get('min_donation_threshold_amount', 0).values[0]:.2f}")
-    col2.write(f"**Number of Unique Projects:** {data['df']['project_name'].nunique()}")
+    col1.write(f"**Total Amount Raised:** ${df['amount'].sum():,.2f}")
+    col1.write(f"**Number of Unique Voters:** {df['voter'].nunique()}")
+    col2.write(f"**Number of Unique Projects:** {df['project_name'].nunique()}")
+    col2.write(f"**Avg. Projects per Voter:** {df.groupby('voter')['project_name'].nunique().mean():.2f}")
 
-def display_crowdfunding_stats(df, matching_amount_display, matching_amount):
+def display_crowdfunding_stats(df, matching_funds_available):
     """Display crowdfunding statistics and metrics."""
     st.header('👥 Crowdfunding')
-    crowd_raised = df['amountUSD'].sum()
-    st.subheader(f"${crowd_raised:,.2f} raised by crowd")
-    st.subheader(f"{(crowd_raised / matching_amount_display) * 100:.2f}% of the matching pool")
+    crowd_raised = df['amount'].sum()
+    st.subheader(f"{crowd_raised:,.2f} crowdfunded is {(crowd_raised / matching_funds_available) * 100:.2f}% of the {matching_funds_available:,.2f} matching pool")
     
-    grouped_voter_data = df.groupby('voter')['amountUSD'].agg(['sum', 'mean', 'median', 'max']).reset_index()
+    grouped_voter_data = df.groupby('voter')['amount'].agg(['sum', 'mean', 'median', 'max']).reset_index()
     
     col1, col2, col3 = st.columns(3)
-    col1.metric("Median Donor Contribution", f"${grouped_voter_data['median'].median():.2f}")
-    col2.metric("Average Donor Contribution", f"${grouped_voter_data['mean'].mean():.2f}")
-    col3.metric("Max Donor Contribution", f"${grouped_voter_data['max'].max():.2f}")
+    col1.metric("Median Donor Contribution", f"{grouped_voter_data['median'].median():.2f}")
+    col2.metric("Average Donor Contribution", f"{grouped_voter_data['mean'].mean():.2f}")
+    col3.metric("Max Donor Contribution", f"{grouped_voter_data['max'].max():.2f}")
 
     return grouped_voter_data
 
@@ -146,120 +43,44 @@ def create_donation_distribution_chart(grouped_voter_data):
     grouped_voter_data['amountUSD_bin'] = pd.cut(grouped_voter_data['sum'], bins=bin_edges, labels=bin_labels, right=False)
     
     fig = px.histogram(grouped_voter_data, x="amountUSD_bin", category_orders={'amountUSD_bin': bin_labels},
-                       labels={'amountUSD_bin': 'Donation Amount Range (USD)'}, nbins=len(bin_edges)-1)
+                       labels={'amountUSD_bin': 'Donation Amount Range'}, nbins=len(bin_edges)-1)
     fig.update_traces(hovertemplate='<b>Donation Range:</b> $%{x}<br><b>Number of Donors:</b> %{y}')
     fig.update_layout(
         title_text='Distribution of Donor Contributions by Amount',
-        xaxis=dict(title='Donation Amount Range (USD)', titlefont=dict(size=18), tickfont=dict(size=14)),
+        xaxis=dict(title='Donation Amount Range', titlefont=dict(size=18), tickfont=dict(size=14)),
         yaxis=dict(title='Number of Donors', titlefont=dict(size=18), tickfont=dict(size=14)),
         bargap=0.3
     )
     return fig
 
-def handle_wallet_filtering():
-    """Handle the upload and processing of CSV file for wallet filtering."""
-    st.write('Upload a CSV file with a single column named "address" containing the ETH addresses to filter out. Addresses should include the 0x prefix.')
-    uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
-    if uploaded_file is not None:
-        csv = pd.read_csv(uploaded_file)
-        st.write("CSV file uploaded successfully. Here's a preview:")
-        st.write(csv.head())
-        return csv
-    return None
-
-def calculate_verified_vs_unverified(scores, donations_df, score_threshold):
-    """Calculate and visualize the comparison between verified and unverified users."""
-    verified_mask = scores['rawScore'] >= score_threshold
-    verified_users_count = verified_mask.sum()
-    verified_funding_total = donations_df.loc[donations_df['rawScore'] >= score_threshold, 'amountUSD'].sum()
-    unverified_users_count = (~verified_mask).sum()
-    unverified_funding_total = donations_df.loc[donations_df['rawScore'] < score_threshold, 'amountUSD'].sum()
-
-    summary_data = pd.DataFrame({
-        'Category': ['Verified', 'Unverified'],
-        'Users': [verified_users_count, unverified_users_count],
-        'Crowdfunding': [verified_funding_total, unverified_funding_total]
-    })
-
-    summary_data['Percentage Of Users'] = summary_data['Users'] / summary_data['Users'].sum() * 100
-    summary_data['Percentage Of Crowdfunding'] = summary_data['Crowdfunding'] / summary_data['Crowdfunding'].sum() * 100
-
-    fig = go.Figure()
-    for metric in ['Crowdfunding', 'Users']:
-        fig.add_trace(go.Bar(
-            x=summary_data[f'Percentage Of {metric}'],
-            y=summary_data['Category'],
-            orientation='h',
-            name=f'Percentage Of {metric}',
-            text=summary_data[f'Percentage Of {metric}'].apply(lambda x: f"{x:.1f}%"),
-            textposition='auto',
-            hovertemplate=f'<b>%{{y}}</b><br>Percentage Of {metric}: %{{x:.1f}}%<br>{metric}: %{{customdata:,}}<extra></extra>',
-            customdata=summary_data[metric]
-        ))
-
-    fig.update_layout(
-        title_text='Percentage of Crowdfunding and Users by Passport Status',
-        title_font=dict(size=24),
-        bargap=0.3,
-        xaxis=dict(title='Percentage', titlefont=dict(size=18), tickfont=dict(size=14)),
-        yaxis=dict(title='Category', titlefont=dict(size=18), tickfont=dict(size=14)),
-        barmode='group',
-        legend=dict(traceorder='reversed'),
-        hoverlabel=dict(bgcolor="white", font_size=16, font_family="Rockwell")
-    )
-    return fig, summary_data
-
-def display_passport_usage(data):
-    """Display passport usage statistics if Sybil defense is enabled."""
-    if data['sybilDefense'] != 'None':
-        st.header('🛂 Passport Usage')
-        total_voters = data['df']['voter'].nunique()
-        st.subheader(f" {len(data['scores'])} Users ({len(data['scores'])/total_voters*100:.1f}%) Have a Passport Score")
-        passport_usage_fig, passport_usage_df = calculate_verified_vs_unverified(data['scores'], data['df'], data['score_at_50_percent'])
-        st.plotly_chart(passport_usage_fig, use_container_width=True)
-
-
-def calculate_matching_results(data):
+def calculate_matching_results(df, matching_cap_amount, matching_funds_available ):
     """Calculate matching results using different strategies (COCM and QF)."""
     # Apply voting eligibility based on passport scores and donation thresholds
-    df_with_passport = fundingutils.apply_voting_eligibility(
-        data['df'].copy(), 
-        data['rounds'].get('min_donation_threshold_amount', 0).values[0],
-        data['score_at_50_percent'],
-        data['score_at_100_percent']
-    )
-    votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
     
-    matching_cap_amount = data['rounds']['matching_cap_amount'].astype(float).values[0]
-    matching_amount = data['rounds']['matching_funds_available'].astype(float).values[0]
+    votes_df = fundingutils.pivot_votes(df)
+
     
     # Calculate matching amounts using both COCM and QF strategies
-    matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df_with_passport, matching_cap_amount, matching_amount, cluster_df=votes_df_with_passport) 
+    matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_funds_available, cluster_df=votes_df) 
                     for strategy in ['COCM', 'QF']]
     
     # Merge results from both strategies
     matching_df = pd.merge(matching_dfs[0], matching_dfs[1], on='project_name', suffixes=('_COCM', '_QF'))
-    
-    # Add project details and calculate the difference between COCM and QF matching
-    df_unique = data['df'][['project_name', 'chain_id', 'round_id', 'application_id']].drop_duplicates()
-    matching_df = pd.merge(matching_df, df_unique, on='project_name', how='left')
-    matching_df['Project Page'] = 'https://explorer.gitcoin.co/#/round/' + matching_df['chain_id'].astype(str) + '/' + matching_df['round_id'].astype(str) + '/' + matching_df['application_id'].astype(str)
     matching_df['Δ Match'] = matching_df['matching_amount_COCM'] - matching_df['matching_amount_QF']
     
     return matching_df.sort_values('matching_amount_COCM', ascending=False)
 
-def display_matching_results(matching_df, matching_token_symbol):
+def display_matching_results(matching_df):
     """Display the matching results in a formatted table."""
-    st.subheader('Matching Results')
+    st.subheader('Results Comparison')
     column_config = {
         "project_name": st.column_config.TextColumn("Project"),
         "matching_amount_COCM": st.column_config.NumberColumn("COCM Match", format="%.2f"),
         "matching_amount_QF": st.column_config.NumberColumn("QF Match", format="%.2f"),
-        "Δ Match": st.column_config.NumberColumn("Δ Match", format="%.2f"),
-        "Project Page": st.column_config.LinkColumn("Project Page", display_text="Visit")
+        "Δ Match": st.column_config.NumberColumn("Δ Match", format="%.2f")
     }
     
-    display_columns = ['project_name', 'matching_amount_COCM', 'matching_amount_QF', 'Δ Match', 'Project Page']
+    display_columns = ['project_name', 'matching_amount_COCM', 'matching_amount_QF', 'Δ Match']
     st.dataframe(
         matching_df[display_columns],
         use_container_width=True,
@@ -267,7 +88,7 @@ def display_matching_results(matching_df, matching_token_symbol):
         hide_index=True
     )
     
-    st.markdown(f'Matching Values shown above are in **{matching_token_symbol}**')
+    #st.markdown(f'Matching Values shown above are in **{matching_token_symbol}**')
 
 def select_matching_strategy():
     """Allow user to select the matching strategy for download."""
@@ -405,59 +226,175 @@ def create_matching_distribution_chart(summary_df, token_symbol):
     )
     return fig
 
+def create_voter_overlap_heatmap(df):
+    df['Project_Short'] = df['project_name'].apply(lambda x: x[:15] + '...' if len(x) > 15 else x)
+
+    titles = df['Project_Short'].unique().tolist()
+    overlap_matrix = pd.DataFrame(0, index=titles, columns=titles)
+
+    for i in range(len(titles)):
+        for j in range(i+1, len(titles)):
+            title1, title2 = titles[i], titles[j]
+
+            voters1 = set(df[df['Project_Short'] == titles[i]]['voter'])
+            voters2 = set(df[df['Project_Short'] == titles[j]]['voter'])
+
+            common_voters = len(voters1.intersection(voters2))
+            total_voters = len(voters1.union(voters2))
+
+            overlap_percentage = common_voters / total_voters * 100
+            overlap_matrix.at[title1, title2] = overlap_percentage
+            overlap_matrix.at[title2, title1] = overlap_percentage
+
+    # Flatten the overlap matrix and sort by overlap percentage in descending order
+    overlap_matrix_flat = overlap_matrix.stack().sort_values(ascending=False)
+
+    # Select the top 20 projects
+    unique_projects = []
+    for idx, overlap in overlap_matrix_flat.items():
+        if idx[0] not in unique_projects:
+            unique_projects.append(idx[0])
+        if idx[1] not in unique_projects:
+            unique_projects.append(idx[1])
+        if len(unique_projects) >= 20:
+            break
+
+    # Create a DataFrame from the top overlaps using the complete overlap matrix
+    top_overlaps_df = overlap_matrix.loc[unique_projects, unique_projects]
+
+    # Create a heatmap using plotly
+    fig = go.Figure(data=go.Heatmap(
+                    z=top_overlaps_df.values,
+                    x=top_overlaps_df.columns,
+                    y=top_overlaps_df.index,
+                    hoverongaps = False,
+                    colorscale='reds',
+                    hovertemplate = '<i>Overlap</i>: %{z:.2f}%<extra></extra>'
+    ))
+
+    fig.update_layout( xaxis_nticks=36)
+    return fig, overlap_matrix
+
 def main():
     """Main function to run the Streamlit app."""
     st.image('assets/657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width=300)
     
-    round_id, chain_id = validate_input()
+    st.title('Matching Results Calculator')
+    st.write('You can use this tool to calculate and compare matching results under a variety of quadratic funding variants. This tool is for when the data is in a CSV and not easily queryable.')
+    st.write('Simply enter your round settings then upload a csv file with three columns to get started: voter, project_name, and amount')
+    st.write('Voter should be the unique id of the voter (usually a wallet address), project_name should be the unique name of the project, and amount should be the amount donated (usually in USD).')
+
+    # Accept inputs for matching_funds_available, matching_token_price, and matching_cap
+    st.subheader('Enter Round Settings')
+    col1, col2 = st.columns(2)
+    matching_funds_available = col1.number_input(
+        'Matching Funds Available in Token',
+        min_value=0.0,
+        value=10000.0,
+        step=100.0,
+        format="%.2f"
+    )
+    matching_token_price = col2.number_input(
+        'Matching Token Price in USD',
+        min_value=0.0,
+        value=1.0,
+        step=0.01,
+        format="%.2f"
+    )
+    matching_cap = col1.number_input(
+        'Matching Cap (%)',
+        min_value=0.0,
+        max_value=100.0,
+        value=10.0,
+        step=1.0,
+        format="%.2f"
+    )
+    #matching_token_decimals = col2.number_input(
+    #    'Matching Token Decimals',
+    #    min_value=0,
+    #    value=18,
+    #    step=1
+    #)
+
+    csv = st.file_uploader('Upload a CSV file with the required columns', type=['csv'])
+    if csv is None:
+        st.stop()
+    df = pd.read_csv(csv)
+    df.head()
+    display_round_statistics(df)
     
-    # Advanced option for wallet filtering
-    with st.expander("Advanced: Filter Out Wallets", expanded=False):
-        csv = handle_wallet_filtering()
-
-    # Load and process data
-    data = load_data(round_id, chain_id, csv)
-
-    # Display various settings of the round
-    display_round_settings(data)
-
-    matching_amount = data['rounds']['matching_funds_available'].astype(float).values[0]
-    matching_amount_display = data['matching_token_price'] * matching_amount
-
     # Crowdfunding stats section
-    grouped_voter_data = display_crowdfunding_stats(data['df'], matching_amount_display, matching_amount)
+    grouped_voter_data = display_crowdfunding_stats(df, matching_funds_available)
     st.plotly_chart(create_donation_distribution_chart(grouped_voter_data), use_container_width=True)
 
-    # Passport usage section (ONLY APPEARS IF SYBIL DEFENSE IS ENABLED)
-    display_passport_usage(data)
 
     # Quadratic Funding Method Comparison section
     st.header('💚 Quadratic Funding Method Comparison')
     st.write('''Quadratic funding helps us solve coordination failures by creating a way for community members to fund what matters to them while amplifying their impact. However, its assumption that people make independent decisions can be exploited to unfairly influence the distribution of matching funds.''')
     st.write('''Connection-oriented cluster-matching (COCM) doesn't make this assumption. Instead, it quantifies just how coordinated groups of actors are likely to be based on the social signals they have in common. Projects backed by more independent agents receive greater matching funds. Conversely, if a project's support network shows higher levels of coordination, the matching funds are reduced, encouraging self-organized solutions within more coordinated groups. ''')
     # Allow removal of projects from matching distribution
-    all_projects = data['df']['project_name'].unique()
-    data['projects_to_remove'] = st.multiselect('Projects may be removed from the matching distribution by selecting them here:', all_projects)
-    data['df'] = data['df'][~data['df']['project_name'].isin(data['projects_to_remove'])]
+    all_projects = df['project_name'].unique()
+    projects_to_remove = st.multiselect('Projects may be removed from the matching distribution by selecting them here:', all_projects)
+    df = df[~df['project_name'].isin(projects_to_remove)]
     # Calculate and display matching results
-    matching_df = calculate_matching_results(data)
-    display_matching_results(matching_df, data['config_df']['token_code'].iloc[0])
+    matching_df = calculate_matching_results(df, matching_cap, matching_funds_available)
+    display_matching_results(matching_df)
+
+    total_delta_sum = matching_df['Δ Match'].abs().sum()
+    st.metric("Sum of Absolute Value of Δ Match", f"{total_delta_sum:.2f}")
+    
+    percent_redistributed = total_delta_sum / matching_funds_available
+    st.metric("Percent of Matching Funds Redistributed", f"{percent_redistributed:.2%}")
+
+    zuzalu_q1_results = {
+        'tech_redistribution_amount': 11.77,
+        'tech_redistribution_percent': .1410,
+        'events_redistribution_amount': 73.92,
+        'events_redistribution_percent': .4439,
+        'token': 'ETH'
+    }
+
+    st.subheader('The Zuzalu Q1 results using COCM were:')
+    col1, col2 = st.columns(2)
+    col1.metric("Tech Redistribution Amount", f"{zuzalu_q1_results['tech_redistribution_amount']:.2f} ETH")
+    col1.metric("Tech Redistribution Percent", f"{zuzalu_q1_results['tech_redistribution_percent']:.2%}")
+    col2.metric("Events Redistribution Amount", f"{zuzalu_q1_results['events_redistribution_amount']:.2f} ETH")
+    col2.metric("Events Redistribution Percent", f"{zuzalu_q1_results['events_redistribution_percent']:.2%}")
+    
+    st.subheader('Comparing the Zuzalu Q1 redistribution to the results of this round:')
+    tech_redistribution_diff = percent_redistributed - zuzalu_q1_results['tech_redistribution_percent']
+    events_redistribution_diff = percent_redistributed - zuzalu_q1_results['events_redistribution_percent']
+
+    if tech_redistribution_diff < 0:
+        st.subheader(f"We have {abs(tech_redistribution_diff):.2%} more collusion-like behavior than the Zuzalu Q1 tech round.")
+    else:
+        st.subheader(f"We have {abs(tech_redistribution_diff):.2%} less collusion-like behavior than the Zuzalu Q1 tech round.")
+
+    if events_redistribution_diff < 0:
+        st.subheader(f"We have {abs(events_redistribution_diff):.2%} more collusion-like behavior than the Zuzalu Q1 events round.")
+    else:
+        st.subheader(f"We have {abs(events_redistribution_diff):.2%} less collusion-like behavior than the Zuzalu Q1 events round.")
+    # Visualize the difference between QF and COCM
+    st.subheader('📊 Top Voter Overlaps per Pair of Project')
+    voter_overlap_heatmap, overlap_matrix = create_voter_overlap_heatmap(df)
+    st.plotly_chart(voter_overlap_heatmap)
 
     # Matching distribution download section
-    st.subheader('Download Matching Distribution')
-    strategy_choice = select_matching_strategy()
-    output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
-    output_df = adjust_matching_overflow(output_df, data['rounds']['matching_funds_available'].values[0], data['config_df']['token_decimals'].iloc[0])
-    display_matching_distribution(output_df)
+    #st.subheader('Download Matching Distribution')
+    #strategy_choice = select_matching_strategy()
+    #output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
+    #output_df = adjust_matching_overflow(output_df, data['rounds']['matching_funds_available'].values[0], data['config_df']['token_decimals'].iloc[0])
+    #display_matching_distribution(output_df)
 
     # Summary section
-    st.header('📈 Sharable Summary')
-    token_code = data['config_df']['token_code'].iloc[0]
-    summary_df = create_summary_dataframe(output_df, matching_df, token_code)
-    display_summary(summary_df)
+    #st.header('📈 Sharable Summary')
+    #token_code = data['config_df']['token_code'].iloc[0]
+    #summary_df = create_summary_dataframe(output_df, matching_df, token_code)
+    #display_summary(summary_df)
 
-    matching_distribution_chart = create_matching_distribution_chart(summary_df, token_code)
-    st.plotly_chart(matching_distribution_chart)
+
+    #matching_distribution_chart = create_matching_distribution_chart(summary_df, token_code)
+    #st.plotly_chart(matching_distribution_chart)
 
 if __name__ == "__main__":
     main()
