@@ -291,15 +291,13 @@ def COCM(donation_df, cluster_df, calcstyle='markov', harsh=True):
   return funding
 
 
-
-
 def standard_donation(donation_df):
   # just do a normal vote (nothing quadratic)
   projects = donation_df.columns
   funding = {p: donation_df[p].sum() for p in projects}
   return funding
 
-def apply_voting_eligibility(votes_data, min_donation_threshold, score_at_50_percent, score_at_100_percent):
+def apply_voting_eligibility(votes_data, min_donation_threshold, score_at_50_percent, score_at_100_percent, filter_in_list):
     votes_data['self_vote'] = (votes_data['voter'] == votes_data['recipient_address']).astype(int) 
     votes_data['low_score'] = (votes_data['rawScore'] < score_at_50_percent).astype(int) 
     votes_data['low_amount'] = (votes_data['amountUSD'] < min_donation_threshold).astype(int) 
@@ -317,6 +315,10 @@ def apply_voting_eligibility(votes_data, min_donation_threshold, score_at_50_per
     votes_data.loc[votes_data['rawScore'] > score_at_100_percent, 'amountUSD'] = votes_data['starting_amountUSD']
     # If the score is not a base vote , set the scaling factor to 0
     votes_data.loc[votes_data['base_vote'] == 0, 'amountUSD'] = 0
+
+    # Lastly, reset the donations of anyone in the filter-in list
+    votes_data.loc[votes_data['voter'].isin(filter_in_list), 'amountUSD'] = votes_data.loc[votes_data['voter'].isin(filter_in_list), 'starting_amountUSD']
+
     return votes_data
 
 
