@@ -375,6 +375,7 @@ def main():
         st.subheader(f"We have {abs(events_redistribution_diff):.2%} less collusion-like behavior than the Zuzalu Q1 events round.")
     # Visualize the difference between QF and COCM
     st.subheader('📊 Top Voter Overlaps per Pair of Project')
+    st.write('If there is collusion-like behavior, can we identify where its strongest?')
     voter_overlap_heatmap, overlap_matrix = create_voter_overlap_heatmap(df)
     st.plotly_chart(voter_overlap_heatmap)
 
