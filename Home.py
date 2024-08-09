@@ -5,18 +5,18 @@ import plotly.graph_objs as go
 import plotly.express as px
 import utils
 import fundingutils
+import matplotlib.pyplot as plt
+from itertools import combinations
 
 # Page configuration
 st.set_page_config(page_title="Matching Results Calculator", page_icon="assets/favicon.png", layout="centered")
-
-
 
 
 def display_round_statistics(df):
     """Display some statistics for the current round."""
     st.subheader(f"Round Stats")
     col1, col2 = st.columns(2)
-    col1.write(f"**Total Amount Raised:** {df['amount'].sum():,.2f}")
+    col1.write(f"**Total Amount Raised:** {df['amount'].sum():,.2f}")    
     col1.write(f"**Number of Unique Voters:** {df['voter'].nunique()}")
     col2.write(f"**Number of Unique Projects:** {df['project_name'].nunique()}")
     col2.write(f"**Avg. Projects per Voter:** {df.groupby('voter')['project_name'].nunique().mean():.2f}")
@@ -229,7 +229,7 @@ def create_voter_overlap_heatmap(df):
     df['Project_Short'] = df['project_name'].apply(lambda x: x[:15] + '...' if len(x) > 15 else x)
 
     titles = df['Project_Short'].unique().tolist()
-    overlap_matrix = pd.DataFrame(0, index=titles, columns=titles)
+    overlap_matrix = pd.DataFrame(0.0, index=titles, columns=titles)
 
     for i in range(len(titles)):
         for j in range(i+1, len(titles)):
@@ -274,6 +274,86 @@ def create_voter_overlap_heatmap(df):
     fig.update_layout( xaxis_nticks=36)
     return fig, overlap_matrix
 
+
+def read_zuQ1_jac():
+    r = lambda fname: [float(l) for l in open(fname, 'r').readlines()]
+    return {x : {y : r(f'data/{x}-{y}-jac.txt') for y in ['pass', 'nopass']} for x in ['tech','event']}
+
+def jaccard_matrix(df):
+    # first remove zeroed out rows to avoid dividing by zero
+    droplist = []
+    for i in df.index:
+        if df.loc[i].sum() == 0:
+            droplist.append(i)
+    df = df.copy().drop(droplist)
+    df.fillna(0, inplace=True)
+
+    bin_df = (df > 0)
+    # X has donors as rows and columns
+    # X at row i, column j is the amount that i donated to projects j also donated to
+    X = df.dot(bin_df.transpose())
+    # now in this df, row i column j is the amount that both i and j donated to their shared projects
+    intersection_df = X + X.transpose()
+    
+    ones = pd.DataFrame(index = df.index, columns = df.columns, data = 1)
+    Y = df.dot(ones.transpose())
+    union_df = Y + Y.transpose()
+
+    jaccard_df = intersection_df / union_df
+    
+    return jaccard_df
+
+def jaccard_indices_list(df):
+    jac_matrix = jaccard_matrix(df)
+    l = []
+    for i in range(len(jac_matrix)):
+        l += list(jac_matrix.iloc[i])[i+1:]
+    return l
+
+def render_jaccard_charts(input_df):
+
+    st.header('Jaccard indices across pairs of donors')
+    st.write('Many pairs of highly similar voters can be a sign of collusion. The Jaccard index is one way of measuring similarity.')
+    st.write('''
+        The Jaccard index is measured like this: 
+        Given two voters, first find their set of shared projects (i.e. projects they both donated to).
+        Then their Jaccard index is the \$ they donated to their shared projects, divided by the \$ they donated in total.
+        If they didn't have any shared projects, their index is 0.
+        If they only donated to the same projects, their index is 1.
+        ''')
+    st.write('''
+        Below, there are charts comparing the Jaccard indices of your rounds\' voters against the voters in the Zuzalu rounds (CDFs, for those in the biz).
+        The jaccard index is plotted on the x axis. For a given index, a line\'s height shows the fraction of voter pairs who are that similar, *or less.*
+        **In general, when the line stays lower for longer, that means more people are similar.**
+        ''')
+
+    jac = read_zuQ1_jac()
+
+    main_df = input_df.pivot_table(index='voter', columns='project_name', values='amountUSD', fill_value=0, aggfunc='sum') 
+
+    main_jac = jaccard_indices_list(main_df)
+
+    renderlist = []
+
+    m1 = {'tech': 'Tech Round', 'event': 'Events Round'}
+    m2 = {'all': 'all voters', 'pass': 'pass holders', 'nopass': 'non pass holders'}
+    text = lambda x,y: f'{m1[x]} -- {m2[y]}'
+
+    clist = ['red', 'blue', 'green', 'purple']
+    cmap = {'m': 'black', 'pass' : 'blue', 'nopass' : 'red'}
+    
+    for x in ['tech', 'event']: 
+        fig, ax = plt.subplots()
+        plt.ecdf(main_jac, color=cmap['m'], label = 'Your round', alpha = 0.5)
+        for y in ['pass', 'nopass']:
+            plt.ecdf(jac[x][y], color=cmap[y], label = text(x,y), alpha = 0.5)
+        plt.legend()
+        plt.xlabel('Jaccard Index (smaller = less similar)')
+        plt.ylabel('% of pairs of donors') 
+        plt.title(f'Your round vs The Zuzalu Q1 {m1[x]}')
+        st.pyplot(fig)
+
+
 def main():
     """Main function to run the Streamlit app."""
     st.image('assets/657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width=300)
@@ -308,12 +388,19 @@ def main():
     #    step=1
     #)
 
+    use_amtUSD = st.checkbox('Use "amountUSD" column in csv (otherwise, will look for "amount")')
+
     csv = st.file_uploader('Upload a CSV file with the required columns', type=['csv'])
     if csv is None:
         st.stop()
+    
     df = pd.read_csv(csv)
+    if use_amtUSD:
+        df['amount'] = df['amountUSD']
+
     df.head()
     display_round_statistics(df)
+
     
     # Crowdfunding stats section
     grouped_voter_data = display_crowdfunding_stats(df, matching_funds_available)
@@ -347,6 +434,9 @@ def main():
     poap_tech_redistribution_pct = poap_results[poap_results['round'] == 'Tech']['pct'].iloc[0]
     poap_events_redistribution_pct = poap_results[poap_results['round'] == 'Events']['pct'].iloc[0]
     
+
+
+
     st.write('')
     st.write('To better understand how strong of an effect COCM would have on the results of this round, the below graph vizualizes how this redistribution amount compares to Zuzalu Q1 Rounds.')
 
@@ -398,6 +488,10 @@ def main():
     voter_overlap_heatmap, overlap_matrix = create_voter_overlap_heatmap(df)
     st.plotly_chart(voter_overlap_heatmap)
 
+
+    render_jaccard_charts(df)
+
+
     # Matching distribution download section
     #st.subheader('Download Matching Distribution')
     #strategy_choice = select_matching_strategy()
@@ -414,6 +508,8 @@ def main():
 
     #matching_distribution_chart = create_matching_distribution_chart(summary_df, token_code)
     #st.plotly_chart(matching_distribution_chart)
+
+    
 
 if __name__ == "__main__":
     main()
