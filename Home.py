@@ -329,7 +329,7 @@ def render_jaccard_charts(input_df):
 
     jac = read_zuQ1_jac()
 
-    main_df = input_df.pivot_table(index='voter', columns='project_name', values='amountUSD', fill_value=0, aggfunc='sum') 
+    main_df = input_df.pivot_table(index='voter', columns='project_name', values='amount', fill_value=0, aggfunc='sum') 
 
     main_jac = jaccard_indices_list(main_df)
 
