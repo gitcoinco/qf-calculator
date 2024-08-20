@@ -263,33 +263,36 @@ def calculate_matching_results(data):
     matching_cap_amount = data['rounds']['matching_cap_amount'].astype(float).values[0]
     matching_amount = data['rounds']['matching_funds_available'].astype(float).values[0]
     
+    # right now data['strat'] is either "half-and-half" or "COCM"
+    s = data['strat']
+
     # Calculate matching amounts using both COCM and QF strategies
     matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df_with_passport, matching_cap_amount, matching_amount, cluster_df=votes_df_with_passport) 
-                    for strategy in ['COCM', 'QF']]
+                    for strategy in [s, 'QF']]
     
     # Merge results from both strategies
-    matching_df = pd.merge(matching_dfs[0], matching_dfs[1], on='project_name', suffixes=('_COCM', '_QF'))
+    matching_df = pd.merge(matching_dfs[0], matching_dfs[1], on='project_name', suffixes=(f'_{s}', '_QF'))
     
     # Add project details and calculate the difference between COCM and QF matching
     df_unique = data['df'][['project_name', 'chain_id', 'round_id', 'application_id']].drop_duplicates()
     matching_df = pd.merge(matching_df, df_unique, on='project_name', how='left')
     matching_df['Project Page'] = 'https://explorer.gitcoin.co/#/round/' + matching_df['chain_id'].astype(str) + '/' + matching_df['round_id'].astype(str) + '/' + matching_df['application_id'].astype(str)
-    matching_df['Δ Match'] = matching_df['matching_amount_COCM'] - matching_df['matching_amount_QF']
+    matching_df['Δ Match'] = matching_df[f'matching_amount_{s}'] - matching_df['matching_amount_QF']
     
-    return matching_df.sort_values('matching_amount_COCM', ascending=False)
+    return matching_df.sort_values(f'matching_amount_{s}', ascending=False)
 
-def display_matching_results(matching_df, matching_token_symbol):
+def display_matching_results(matching_df, matching_token_symbol, s):
     """Display the matching results in a formatted table."""
     st.subheader('Matching Results')
     column_config = {
         "project_name": st.column_config.TextColumn("Project"),
-        "matching_amount_COCM": st.column_config.NumberColumn("COCM Match", format="%.2f"),
+        f"matching_amount_{s}": st.column_config.NumberColumn(f"{s} Match", format="%.2f"),
         "matching_amount_QF": st.column_config.NumberColumn("QF Match", format="%.2f"),
         "Δ Match": st.column_config.NumberColumn("Δ Match", format="%.2f"),
         "Project Page": st.column_config.LinkColumn("Project Page", display_text="Visit")
     }
     
-    display_columns = ['project_name', 'matching_amount_COCM', 'matching_amount_QF', 'Δ Match', 'Project Page']
+    display_columns = ['project_name', f'matching_amount_{s}', 'matching_amount_QF', 'Δ Match', 'Project Page']
     st.dataframe(
         matching_df[display_columns],
         use_container_width=True,
@@ -299,11 +302,11 @@ def display_matching_results(matching_df, matching_token_symbol):
     
     st.markdown(f'Matching Values shown above are in **{matching_token_symbol}**')
 
-def select_matching_strategy():
+def select_matching_strategy(s):
     """Allow user to select the matching strategy for download."""
     return st.selectbox(
         'Select the matching strategy to download:',
-        ('COCM', 'QF')
+        (f'{s}', 'QF')
     )
 
 def prepare_output_dataframe(matching_df, strategy_choice, data):
@@ -378,16 +381,17 @@ def display_matching_distribution(output_df):
         mime='text/csv'
     )
     st.write('You can upload this CSV to manager.gitcoin.co to apply the matching results to your round')
-    st.header(f'The value of the sum of the matched column is {output_df["matched"].sum()}')
+    #st.header(f'The value of the sum of the matched column is {output_df["matched"].sum()}')
+    st.write(f'The value of the sum of the matched column is {output_df["matched"].sum()}')
 
-def create_summary_dataframe(output_df, matching_df, token_code):
+def create_summary_dataframe(output_df, matching_df, token_code, s):
     """Create a summary dataframe for the round results."""
     summary_df = output_df[['projectName', 'matchedUSD']].copy()
-    summary_df = summary_df.merge(matching_df[['project_name', 'matching_amount_COCM', 'Project Page']], 
+    summary_df = summary_df.merge(matching_df[['project_name', f'matching_amount_{s}', 'Project Page']], 
                                   left_on='projectName', right_on='project_name', how='left')
     summary_df = summary_df.rename(columns={
         'projectName': 'Project',
-        'matching_amount_COCM': f'Matching Funds ({token_code})',
+        f'matching_amount_{s}': f'Matching Funds ({token_code})',
         'matchedUSD': 'Matching Funds (USD)',
         'Project Page': 'Project Page'
     })
@@ -441,15 +445,28 @@ def main():
     
     round_id, chain_id = validate_input()
     
-    # Advanced option for wallet filtering
+    # Advanced options 
     with st.expander("Advanced: Filter Out Wallets", expanded=False):
         filter_out_csv = handle_csv_upload(purpose='filter out')
 
     with st.expander("Advanced: Filter In Wallets", expanded=False):
         filter_in_csv = handle_csv_upload(purpose='filter in')
 
+    half_and_half = False
+    with st.expander("Advanced: give results as half COCM / half QF"):
+        st.write('''
+            Toggle the switch below to calculate a matching result blending COCM and QF, instead of pure COCM.
+            In this case, funding amounts will be found for each mechanism, normalized to the size of the matching pool, and then averaged for each project.
+            E.g. if a project gets 10% of the matching pool under COCM and 40% of the matching pool under QF, they will get 25% of the matching pool under this calculation.''')
+        half_and_half = st.toggle('Select for half-and-half')
+
     # Load and process data
     data = load_data(round_id, chain_id, filter_out_csv=filter_out_csv, filter_in_csv=filter_in_csv)
+
+    if half_and_half == True:
+        data['strat'] = 'half-and-half'
+    else:
+        data['strat'] = 'COCM'
 
     # Display various settings of the round
     display_round_settings(data)
@@ -468,17 +485,19 @@ def main():
     st.header('💚 Quadratic Funding Method Comparison')
     st.write('''Quadratic funding helps us solve coordination failures by creating a way for community members to fund what matters to them while amplifying their impact. However, its assumption that people make independent decisions can be exploited to unfairly influence the distribution of matching funds.''')
     st.write('''Connection-oriented cluster-matching (COCM) doesn't make this assumption. Instead, it quantifies just how coordinated groups of actors are likely to be based on the social signals they have in common. Projects backed by more independent agents receive greater matching funds. Conversely, if a project's support network shows higher levels of coordination, the matching funds are reduced, encouraging self-organized solutions within more coordinated groups. ''')
+    
     # Allow removal of projects from matching distribution
     all_projects = data['df']['project_name'].unique()
     data['projects_to_remove'] = st.multiselect('Projects may be removed from the matching distribution by selecting them here:', all_projects)
     data['df'] = data['df'][~data['df']['project_name'].isin(data['projects_to_remove'])]
+    
     # Calculate and display matching results
     matching_df = calculate_matching_results(data)
-    display_matching_results(matching_df, data['config_df']['token_code'].iloc[0])
+    display_matching_results(matching_df, data['config_df']['token_code'].iloc[0], data['strat'])
 
     # Matching distribution download section
     st.subheader('Download Matching Distribution')
-    strategy_choice = select_matching_strategy()
+    strategy_choice = select_matching_strategy(data['strat'])
     output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
     output_df = adjust_matching_overflow(output_df, data['rounds']['matching_funds_available'].values[0], data['config_df']['token_decimals'].iloc[0])
     display_matching_distribution(output_df)
@@ -486,7 +505,7 @@ def main():
     # Summary section
     st.header('📈 Sharable Summary')
     token_code = data['config_df']['token_code'].iloc[0]
-    summary_df = create_summary_dataframe(output_df, matching_df, token_code)
+    summary_df = create_summary_dataframe(output_df, matching_df, token_code, data['strat'])
     display_summary(summary_df)
 
     matching_distribution_chart = create_matching_distribution_chart(summary_df, token_code)

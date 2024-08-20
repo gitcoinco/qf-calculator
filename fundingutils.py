@@ -110,7 +110,7 @@ def cluster_profile_pairwise(donation_df, cluster_df):
 
   cluster_df = binarize(cluster_df)
 
-  donation_df, cluster_df = align(donation_df, cluster_df)
+  donation_df, cluster_df = align(donation_df.copy(), cluster_df.copy())
 
   projects = donation_df.columns
   donors = donation_df.index
@@ -205,8 +205,16 @@ def COCM(donation_df, cluster_df, calcstyle='markov', harsh=True):
   # calcstyle is a variable signifying how to compute similarity scores between users and projects
   # harsh is a boolean determining how we should scale contributions, given similarity scores
 
-  # first, clean up the dataframes (see the align function definition for details)
-  donation_df, cluster_df = align(donation_df, cluster_df)
+
+  # we're about to clean up the dataframes, which could remove columns from donation_df (i.e. projects) that have no donors
+  # but we still want to say that these projects got 0 funding in the dictionary of results we return
+  # so save a list of projects now, and use that to initialize the dataframe of results.
+  # then any projects that got taken out won't be a part of any other for loops (which will be over the list "projects", defined below)
+  # and their funding amounts will stay as 0
+  orig_projects = donation_df.columns
+
+  # clean up the dataframes (see the align function definition for details)
+  donation_df, cluster_df = align(donation_df.copy(), cluster_df.copy())
 
   projects = donation_df.columns
   clusters = cluster_df.columns
@@ -251,7 +259,7 @@ def COCM(donation_df, cluster_df, calcstyle='markov', harsh=True):
     k_indicators = friendship_matrix.dot(cluster_df).apply(lambda col: col > 0)
 
   # Create a dictionary to store funding amounts for each project.
-  funding = {p: 0 for p in projects}
+  funding = {p: 0 for p in orig_projects}
 
   for p in projects:
     # get the actual k values for this project using contributions and indicators.
@@ -323,8 +331,17 @@ def apply_voting_eligibility(votes_data, min_donation_threshold, score_at_50_per
 
 
 def pivot_votes(round_votes):
-    pivot_votes = round_votes.pivot_table(index='voter', columns='project_name', values='amountUSD', fill_value=0)
+    pivot_votes = round_votes.pivot_table(index='voter', columns='project_name', values='amountUSD', fill_value=0, aggfunc='sum')
     return pivot_votes
+
+def normalize(funding_dict):
+  total = sum(funding_dict.values())
+  if total == 0:
+    return funding_dict
+  return {p: funding_dict[p]/total for p in funding_dict.keys()} 
+
+def crossfade(dict_1, dict_2, pct=0.5):
+  return {p: (dict_1[p] * pct) + (dict_2[p] * (1-pct)) for p in dict_1.keys()}
 
 @st.cache_resource(ttl=36000)
 def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cluster_df = None):
@@ -339,10 +356,13 @@ def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cl
         funding = COCM(donation_df, cluster_df, calcstyle='og')
     elif algo == 'COCM pct_friends':
         funding = COCM(donation_df, cluster_df, calcstyle='pct_friends')
+    elif algo == 'half-and-half':
+        cocm_normalized = normalize(COCM(donation_df, cluster_df))
+        std_qf_normalized = normalize(standard_qf(donation_df))
+        funding = crossfade(cocm_normalized, std_qf_normalized)
     else:
         funding = standard_qf(donation_df)
-    total_money = sum(funding.values())
-    funding_normalized = {p: funding[p]/total_money for p in projects} 
+    funding_normalized = normalize(funding)
     # Create DataFrame with 'project_name' and 'matching_amount' columns
     result = pd.DataFrame(list(funding_normalized.items()), columns=['project_name', 'matching_amount'])
     # Apply the cap to the 'matching_amount' column
@@ -352,6 +372,8 @@ def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cl
     result['matching_percent'] = result['matching_amount'] * 100
     result['matching_amount'] = result['matching_amount'] * matching_amount
 
+    #prevent overflow 
     while (sum(result['matching_amount'])*1e18) > (matching_amount*1e18):
         result['matching_amount'] = result['matching_amount'] * (matching_amount / sum(result['matching_amount']))
+
     return result
