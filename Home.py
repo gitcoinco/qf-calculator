@@ -382,7 +382,6 @@ def display_matching_distribution(output_df):
     )
     st.write('You can upload this CSV to manager.gitcoin.co to apply the matching results to your round')
     #st.header(f'The value of the sum of the matched column is {output_df["matched"].sum()}')
-    st.write(f'The value of the sum of the matched column is {output_df["matched"].sum()}')
 
 def create_summary_dataframe(output_df, matching_df, token_code, s):
     """Create a summary dataframe for the round results."""
