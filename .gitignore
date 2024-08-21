@@ -3,3 +3,5 @@ testing.ipynb
 .pyc
 *.pyc
 data/passport_scores_june24.csv
+codebase.md
+.aidigestignore

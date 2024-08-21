@@ -242,7 +242,7 @@ def display_passport_usage(data):
         if data['sybilDefense'] == 'Passport Model Based Detection System':
             total_voters = data['df']['voter'].nunique()
             n_users_passing_100 = len(data['scores'][data['scores']['rawScore'] >= data['score_at_100_percent']]) 
-            n_users_passing_50 = len(data['scores'][data['scores']['rawScore'] >= data['score_at_50_percent']]) 
+            n_users_passing_50 = len(data['scores'][(data['scores']['rawScore'] >= data['score_at_50_percent']) & (data['scores']['rawScore'] < data['score_at_100_percent'])])
             st.subheader(f" {n_users_passing_100} Users ({n_users_passing_100/total_voters*100:.1f}%) recieve full matching (passport model score over {data['score_at_100_percent']})")
             st.subheader(f" {n_users_passing_50} Users ({n_users_passing_50/total_voters*100:.1f}%) recieve partial matching (passport model score between {data['score_at_50_percent']} and {data['score_at_100_percent']})")
             if num_filtered_in > 0:
