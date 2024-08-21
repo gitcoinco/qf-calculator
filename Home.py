@@ -440,7 +440,7 @@ def create_matching_distribution_chart(summary_df, token_symbol):
 
 def main():
     """Main function to run the Streamlit app."""
-    st.image('assets/657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width=300)
+    st.image('assets/657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width=200)
     
     round_id, chain_id = validate_input()
     
@@ -507,8 +507,8 @@ def main():
     summary_df = create_summary_dataframe(output_df, matching_df, token_code, data['strat'])
     display_summary(summary_df)
 
-    matching_distribution_chart = create_matching_distribution_chart(summary_df, token_code)
-    st.plotly_chart(matching_distribution_chart)
+    #matching_distribution_chart = create_matching_distribution_chart(summary_df, token_code)
+    #st.plotly_chart(matching_distribution_chart)
 
 if __name__ == "__main__":
     main()

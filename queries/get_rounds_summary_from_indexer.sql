@@ -13,4 +13,4 @@ SELECT
     (r."round_metadata" #>> '{quadraticFundingConfig, minDonationThresholdAmount}')::double precision AS "min_donation_threshold_amount",
     (r."round_metadata" #>> '{quadraticFundingConfig, sybilDefense}')::text AS "sybilDefense"
 FROM
-    "chain_data_70"."rounds" AS r
+    "chain_data_75"."rounds" AS r
