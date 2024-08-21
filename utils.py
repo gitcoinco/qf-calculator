@@ -93,10 +93,6 @@ def load_passport_model_scores(addresses):
         'addresses': addresses
     }
     results = run_query(query, params)  
-    st.header("Passport Model Scores")
-    st.write("There are a total of", len(results), "rows in the results.")
-    st.write("There are a total of ", len(results['address'].unique()), "unique addresses in the results.")
-    st.write(results)
     return results
 
 @st.cache_resource(ttl=ttl_long)
