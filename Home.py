@@ -61,10 +61,16 @@ def calculate_matching_results(df, matching_cap_amount, matching_funds_available
     
     # Calculate matching amounts using both COCM and QF strategies
     matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_funds_available, cluster_df=votes_df) 
-                    for strategy in ['COCM', 'QF']]
+                    for strategy in ['COCM', 'QF', 'pairwise']]
     
-    # Merge results from both strategies
+    # Merge results from all three strategies
     matching_df = pd.merge(matching_dfs[0], matching_dfs[1], on='project_name', suffixes=('_COCM', '_QF'))
+    matching_df = pd.merge(matching_df, matching_dfs[2], on='project_name')
+    matching_df = matching_df.rename(columns={
+        'matching_amount': 'matching_amount_pairwise',
+        'matching_percent': 'matching_percent_pairwise'
+    })
+    st.write(matching_df)
     matching_df['Δ Match'] = matching_df['matching_amount_COCM'] - matching_df['matching_amount_QF']
     
     return matching_df.sort_values('matching_amount_COCM', ascending=False)
@@ -76,10 +82,11 @@ def display_matching_results(matching_df):
         "project_name": st.column_config.TextColumn("Project"),
         "matching_amount_COCM": st.column_config.NumberColumn("COCM Match", format="%.2f"),
         "matching_amount_QF": st.column_config.NumberColumn("QF Match", format="%.2f"),
+        "matching_amount_pairwise": st.column_config.NumberColumn("Pairwise Match", format="%.2f"),
         "Δ Match": st.column_config.NumberColumn("Δ Match", format="%.2f")
     }
     
-    display_columns = ['project_name', 'matching_amount_COCM', 'matching_amount_QF', 'Δ Match']
+    display_columns = ['project_name', 'matching_amount_COCM', 'matching_amount_QF', 'matching_amount_pairwise', 'Δ Match']
     st.dataframe(
         matching_df[display_columns],
         use_container_width=True,
@@ -369,15 +376,15 @@ def main():
     matching_funds_available = col1.number_input(
         'Matching Funds Available in Token',
         min_value=0.0,
-        value=10000.0,
-        step=100.0,
-        format="%.2f"
+        value=111.0,
+        step=0.5,
+        format="%.1f"
     )
     matching_cap = col2.number_input(
         'Matching Cap (%)',
         min_value=0.0,
         max_value=100.0,
-        value=10.0,
+        value=100.0,
         step=1.0,
         format="%.2f"
     )
