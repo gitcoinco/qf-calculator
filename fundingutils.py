@@ -109,9 +109,7 @@ def pairwise(donation_df, M=0.01):
 def cluster_profile_pairwise(donation_df, cluster_df):
 
   cluster_df = binarize(cluster_df)
-
   donation_df, cluster_df = align(donation_df, cluster_df)
-
   projects = donation_df.columns
   donors = donation_df.index
   clusters = cluster_df.columns
@@ -192,7 +190,6 @@ def donation_profile_clustermatch(donation_df):
 
   projects = donation_df.columns
   don_profiles = donation_df.apply(lambda row: ''.join('1' if row[p] > 0 else '0' for p in projects), axis=1)
-
   don_profile_df = pd.DataFrame(index=donation_df.index, columns=don_profiles.unique(), data=0)
 
   for wallet in donation_df.index:
@@ -204,7 +201,6 @@ def COCM(donation_df, cluster_df, calcstyle='markov', harsh=True):
   # run CO-CM on a set of funding amounts and clusters
   # calcstyle is a variable signifying how to compute similarity scores between users and projects
   # harsh is a boolean determining how we should scale contributions, given similarity scores
-
   # first, clean up the dataframes (see the align function definition for details)
   donation_df, cluster_df = align(donation_df, cluster_df)
 
@@ -290,9 +286,6 @@ def COCM(donation_df, cluster_df, calcstyle='markov', harsh=True):
 
   return funding
 
-
-
-
 def standard_donation(donation_df):
   # just do a normal vote (nothing quadratic)
   projects = donation_df.columns
@@ -321,16 +314,16 @@ def apply_voting_eligibility(votes_data, min_donation_threshold, score_at_50_per
 
 
 def pivot_votes(round_votes):
-    pivot_votes = round_votes.pivot_table(index='voter', columns='project_name', values='amount', fill_value=0, aggfunc = 'sum')
+    pivot_votes = round_votes.pivot_table(index='voter', columns='project_name', values='amount', fill_value=0)
     return pivot_votes
 
 @st.cache_resource(ttl=36000)
-def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cluster_df = None):
+def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cluster_df = None, M=0.1):
     projects = donation_df.columns
     if algo == 'donation_profile_clustermatch':
         funding = donation_profile_clustermatch(donation_df)
     elif algo == 'pairwise':
-        funding = pairwise(donation_df)
+        funding = pairwise(donation_df, M)
     elif algo == 'COCM': #markov
         funding = COCM(donation_df, cluster_df)
     elif algo == 'COCM og':

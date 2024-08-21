@@ -60,7 +60,7 @@ def calculate_matching_results(df, matching_cap_amount, matching_funds_available
 
     
     # Calculate matching amounts using both COCM and QF strategies
-    matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_funds_available, cluster_df=votes_df) 
+    matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df, matching_cap_amount, matching_funds_available, cluster_df=votes_df, M=100) 
                     for strategy in ['COCM', 'QF', 'pairwise']]
     
     # Merge results from all three strategies
