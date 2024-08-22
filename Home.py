@@ -408,18 +408,41 @@ def prepare_output_dataframe(matching_df, strategy_choice, data):
     
     return output_df.fillna(0)
 
+from decimal import Decimal, getcontext
+
 def adjust_matching_overflow(output_df, matching_funds_available, matching_token_decimals):
-    """Adjust matching funds if there's an overflow."""
-    full_matching_funds_available = int(int(matching_funds_available) * 10**(int(matching_token_decimals)))
-    matching_overflow = sum(int(x) for x in output_df['matched']) - full_matching_funds_available
-    while matching_overflow >= 0:
-        st.warning(f'Potential Matching Overflow of {matching_overflow} Detected. Adjusting Matching Funds')
-        output_df['matched_pct'] = output_df['matched'] / output_df['matched'].sum()
-        output_df['matched'] = (output_df['matched'] - (output_df['matched_pct'] * matching_overflow).apply(lambda x: int(x))).clip(lower=1)
-        matching_overflow = sum(int(x) for x in output_df['matched']) - full_matching_funds_available
-        st.warning(f'Adjusted Matching Overflow is {matching_overflow}') # IF THIS NUMBER IS NEGATIVE WE ARE GOOD TO GO
-    output_df['matched'] = output_df['matched'].apply(lambda x: int(x))
-    #output_df = output_df.drop(columns=['matched_pct'])
+    """Adjust matching funds if there's an overflow, using Decimal for high precision and handling numpy types."""
+    getcontext().prec = 36  # Set precision high enough to handle 18 decimal places safely
+
+    # Convert numpy types to Python types
+    matching_funds_available = float(matching_funds_available)
+    matching_token_decimals = int(matching_token_decimals)
+
+    full_matching_funds_available = Decimal(str(matching_funds_available)) * Decimal(10**matching_token_decimals)
+    total_matched = sum(Decimal(str(x)) for x in output_df['matched'])
+    matching_overflow = total_matched - full_matching_funds_available
+    
+    if matching_overflow <= 0:
+        return output_df
+
+    st.warning(f'Initial Matching Overflow: {matching_overflow / Decimal(10**matching_token_decimals)}. Adjusting Matching Funds')
+
+    # Calculate the reduction factor
+    reduction_factor = full_matching_funds_available / total_matched
+
+    # Apply the reduction factor to all matched amounts
+    output_df['matched'] = output_df['matched'].apply(lambda x: int(Decimal(str(x)) * reduction_factor))
+
+    # Distribute any remaining overflow due to rounding
+    remaining_overflow = sum(Decimal(str(x)) for x in output_df['matched']) - full_matching_funds_available
+    if remaining_overflow > 0:
+        sorted_indices = output_df['matched'].argsort()[::-1]
+        for i in range(int(remaining_overflow)):
+            output_df.iloc[sorted_indices[i], output_df.columns.get_loc('matched')] -= 1
+
+    final_overflow = sum(Decimal(str(x)) for x in output_df['matched']) - full_matching_funds_available
+    st.success(f'Matching funds adjusted in 1 iteration. Final overflow: {final_overflow / Decimal(10**matching_token_decimals)}')
+
     return output_df
 
 def display_matching_distribution(output_df):
