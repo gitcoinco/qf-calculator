@@ -5,6 +5,7 @@ import plotly.graph_objs as go
 import plotly.express as px
 import utils
 import fundingutils
+import sys
 
 # Page configuration
 st.set_page_config(page_title="Matching Results", page_icon="assets/favicon.png", layout="wide")
@@ -64,6 +65,12 @@ def display_recent_rounds():
         column_config=column_config,
         hide_index=True
     )
+
+    st.write(f"Python version: {sys.version}")
+    st.write(f"Pandas version: {pd.__version__}")
+    st.write(f"Numpy version: {np.__version__}")
+    
+
 
 
 def validate_input():
