@@ -501,7 +501,6 @@ def create_matching_distribution_chart(summary_df, token_symbol):
 def main():
     """Main function to run the Streamlit app."""
     st.image('assets/657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width=200)
-    
     round_id, chain_id = validate_input()
     
     # Advanced options 
