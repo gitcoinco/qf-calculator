@@ -11,37 +11,26 @@ import time
 ttl_short = 900 # 15 minutes
 ttl_long = 36000 # 10 hours
 
-def run_query(query):
-    """Run a query on the indexer database and return results as a DataFrame."""
+def run_query(query, params=None, database="grants"):
+    """Run a parameterized query on the specified database and return results as a DataFrame."""
     try:
-        conn = pg.connect(host=st.secrets["indexer"]["host"], 
-                           port=st.secrets["indexer"]["port"], 
-                           dbname=st.secrets["indexer"]["dbname"], 
-                           user=st.secrets["indexer"]["user"], 
-                           password=st.secrets["indexer"]["password"])
+        conn = pg.connect(host=st.secrets[database]["host"], 
+                            port=st.secrets[database]["port"], 
+                            dbname=st.secrets[database]["dbname"], 
+                            user=st.secrets[database]["user"], 
+                            password=st.secrets[database]["password"])
         cur = conn.cursor()
-        cur.execute(query)
+        if params is None:
+            cur.execute(query)
+        else:
+            cur.execute(query, params)
         col_names = [desc[0] for desc in cur.description]
         results = pd.DataFrame(cur.fetchall(), columns=col_names)
     except pg.Error as e:
         st.warning(f"ERROR: Could not execute the query. {e}")
     finally:
+        cur.close()
         conn.close()
-    return results
-
-def run_query_with_params(query, params, database="indexer"):
-    """Run a parameterized query on the specified database and return results as a DataFrame."""
-    conn = pg.connect(host=st.secrets[database]["host"], 
-                           port=st.secrets[database]["port"], 
-                           dbname=st.secrets[database]["dbname"], 
-                           user=st.secrets[database]["user"], 
-                           password=st.secrets[database]["password"])
-    cur = conn.cursor()
-    cur.execute(query, params)
-    col_names = [desc[0] for desc in cur.description]
-    results = pd.DataFrame(cur.fetchall(), columns=col_names)
-    cur.close()
-    conn.close()
     return results
 
 def load_data_from_url(url):
@@ -77,7 +66,7 @@ def get_round_votes(round_id, chain_id):
         'round_id': round_id,
         'chain_id': chain_id
     }
-    results = run_query_with_params(query, params)
+    results = run_query(query, params)
     return results
 
 @st.cache_resource(ttl=ttl_short)
@@ -90,34 +79,21 @@ def get_projects_in_round(round_id, chain_id):
         'round_id': round_id,
         'chain_id': chain_id
     }
-    results = run_query_with_params(query, params)
+    results = run_query(query, params)
     return results
 
 @st.cache_resource(ttl=ttl_long) 
 def load_passport_model_scores(addresses):
     """Load and process passport model scores for given addresses."""
-    url = 'https://public.scorer.gitcoin.co/eth_model_scores_v2/eth_model_scores.jsonl'
-    scores = load_data_from_url(url)
-    scores = pd.DataFrame(scores)
-    for key in scores['data'][0].keys():
-        scores[key] = scores['data'].apply(lambda x: x.get(key, np.nan))
-    scores.drop('data', axis=1, inplace=True)
-    
-    scores['address'] = scores['address'].str.lower()
-    scores = scores[scores['address'].isin(addresses)]
-    scores['score'] = scores['score'].astype(float)
-    scores['rawScore'] = scores['score']
-
-    # Load additional scores from CSV file
-    df = pd.read_csv('data/gg20_missing_addresses_scores.csv')
-    df.rename(columns={'scores': 'rawScore'}, inplace=True)
-    df = df[df['address'].isin(addresses)]
-    df['updated_at'] = pd.Timestamp('2023-05-09 23:59:00', tz='UTC')
-    scores['updated_at'] = pd.to_datetime(scores['updated_at'], utc=True)
-    scores = scores[['address', 'rawScore', 'updated_at']]
-    df = pd.concat([df, scores], ignore_index=True)
-    df = df.sort_values('updated_at', ascending=False).drop_duplicates('address')
-    return df
+    addresses = tuple(addresses)
+    sql_query_file = 'queries/get_passport_aggregate_model_scores.sql'
+    with open(sql_query_file, 'r') as file:
+        query = file.read()
+    params = {
+        'addresses': addresses
+    }
+    results = run_query(query, params)  
+    return results
 
 @st.cache_resource(ttl=ttl_long)
 def load_avax_scores(addresses):
@@ -145,7 +121,7 @@ def load_stamp_scores(addresses):
     params = {
         'addresses': addresses
     }
-    results = run_query_with_params(query, params, database="grants")  
+    results = run_query(query, params)  
     return results
 
 def parse_config_file(file_content):

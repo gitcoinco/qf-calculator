@@ -46,7 +46,7 @@ def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
         sybilDefense = 'Passport Stamps'
     elif sybilDefense == 'passport-mbds':
         scores = utils.load_passport_model_scores(unique_voters)
-        score_at_50_percent, score_at_100_percent = 1, 25
+        score_at_50_percent, score_at_100_percent = 25,50
         sybilDefense = 'Passport Model Based Detection System'
     else:
         # If no Sybil defense is set, assign a default score of 1 to all voters
@@ -137,6 +137,22 @@ def display_round_settings(data):
     col2.write(f"**Matching Token Price:** ${data['matching_token_price']:.2f}")
     col2.write(f"**Minimum Donation Threshold Amount:** ${data['rounds'].get('min_donation_threshold_amount', 0).values[0]:.2f}")
     col2.write(f"**Number of Unique Projects:** {data['df']['project_name'].nunique()}")
+
+
+def calculate_percent_scored_voters(data):
+    """Calculate the percentage of unique voters who have a score."""
+    total_unique_voters = data['df']['voter'].nunique()
+    scored_unique_voters = len(data['scores'])
+    percent_scored = (scored_unique_voters / total_unique_voters) * 100 if total_unique_voters > 0 else 0
+    return percent_scored
+
+def display_scores_progress_bar(data):
+    """Display a progress bar showing the percentage of voters who have a score."""
+    percent_scored = calculate_percent_scored_voters(data)
+    st.subheader('')
+    st.subheader(f"{percent_scored:.2f}% of addresses scored using {data['sybilDefense']}")
+    st.progress(percent_scored/100)
+    st.subheader('')
 
 def display_crowdfunding_stats(df, matching_amount_display, matching_amount):
     """Display crowdfunding statistics and metrics."""
@@ -231,6 +247,7 @@ def display_passport_usage(data):
     """Display passport usage statistics if Sybil defense is enabled."""
     if data['sybilDefense'] != 'None':
         st.header('🛂 Passport Usage')
+        display_scores_progress_bar(data)
         num_filtered_in = len(data['filter_in_list'])
         total_voters = data['df']['voter'].nunique()
         if data['sybilDefense'] in ['Passport Stamps', 'Avalanche Passport']:
@@ -242,7 +259,7 @@ def display_passport_usage(data):
         if data['sybilDefense'] == 'Passport Model Based Detection System':
             total_voters = data['df']['voter'].nunique()
             n_users_passing_100 = len(data['scores'][data['scores']['rawScore'] >= data['score_at_100_percent']]) 
-            n_users_passing_50 = len(data['scores'][data['scores']['rawScore'] >= data['score_at_50_percent']]) 
+            n_users_passing_50 = len(data['scores'][(data['scores']['rawScore'] >= data['score_at_50_percent']) & (data['scores']['rawScore'] < data['score_at_100_percent'])])
             st.subheader(f" {n_users_passing_100} Users ({n_users_passing_100/total_voters*100:.1f}%) recieve full matching (passport model score over {data['score_at_100_percent']})")
             st.subheader(f" {n_users_passing_50} Users ({n_users_passing_50/total_voters*100:.1f}%) recieve partial matching (passport model score between {data['score_at_50_percent']} and {data['score_at_100_percent']})")
             if num_filtered_in > 0:
@@ -369,7 +386,7 @@ def display_matching_distribution(output_df):
     
     # Format large numbers for display
     for col in ['matched', 'totalReceived', 'sumOfSqrt', 'capOverflow', 'matchedWithoutCap']:
-        display_df[col] = display_df[col].apply(lambda x: f"{x:,}")
+        display_df[col] = display_df[col].apply(lambda x: f"{x}")
     
     st.write(display_df)
     
@@ -496,6 +513,8 @@ def main():
 
     # Matching distribution download section
     st.subheader('Download Matching Distribution')
+    if calculate_percent_scored_voters(data) < 100:
+        st.warning('Matching distribution download is not recommended until 100% of addresses are scored. This could take 24-72 hours after the round concludes.')
     strategy_choice = select_matching_strategy(data['strat'])
     output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
     output_df = adjust_matching_overflow(output_df, data['rounds']['matching_funds_available'].values[0], data['config_df']['token_decimals'].iloc[0])
