@@ -415,7 +415,7 @@ def adjust_matching_overflow(output_df, matching_funds_available, matching_token
     while matching_overflow >= 0:
         st.warning('Potential Matching Overflow Detected. Adjusting Matching Funds')
         output_df['matched_pct'] = output_df['matched'] / output_df['matched'].sum()
-        output_df['matched'] = max(output_df['matched'] - (max(output_df['matched_pct'] * matching_overflow).apply(lambda x: int(x)),1),0)
+        output_df['matched'] = (output_df['matched'] - (output_df['matched_pct'] * matching_overflow).apply(lambda x: int(x))).clip(lower=1)
         matching_overflow = sum(int(x) for x in output_df['matched']) - full_matching_funds_available
         st.warning(f'Adjusted Matching Overflow is {matching_overflow}') # IF THIS NUMBER IS NEGATIVE WE ARE GOOD TO GO
     output_df['matched'] = output_df['matched'].apply(lambda x: int(x))
