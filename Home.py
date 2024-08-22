@@ -66,12 +66,6 @@ def display_recent_rounds():
         hide_index=True
     )
 
-    st.write(f"Python version: {sys.version}")
-    st.write(f"Pandas version: {pd.__version__}")
-    st.write(f"Numpy version: {np.__version__}")
-    
-
-
 
 def validate_input():
     """Validate the presence of round_id and chain_id in the URL."""
@@ -420,7 +414,7 @@ def adjust_matching_overflow(output_df, matching_funds_available, matching_token
     full_matching_funds_available = int(int(matching_funds_available) * 10**(int(matching_token_decimals)))
     matching_overflow = sum(int(x) for x in output_df['matched']) - full_matching_funds_available
     
-    if matching_overflow >= 0:
+    while matching_overflow >= 0:
         st.warning('Potential Matching Overflow Detected. Adjusting Matching Funds')
         matching_adjustment = int(matching_overflow / max(output_df['matched'].count(), 1))
         output_df['matched'] = output_df['matched'].apply(lambda x: str(max(int(x) - matching_adjustment, 0)))
