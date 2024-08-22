@@ -425,7 +425,7 @@ def adjust_matching_overflow(output_df, matching_funds_available, matching_token
     if matching_overflow <= 0:
         return output_df
 
-    st.warning(f'Initial Matching Overflow: {matching_overflow / Decimal(10**matching_token_decimals)}. Adjusting Matching Funds')
+    #st.warning(f'Initial Matching Overflow: {matching_overflow / Decimal(10**matching_token_decimals)}. Adjusting Matching Funds')
 
     # Calculate the reduction factor
     reduction_factor = full_matching_funds_available / total_matched
@@ -441,8 +441,9 @@ def adjust_matching_overflow(output_df, matching_funds_available, matching_token
             output_df.iloc[sorted_indices[i], output_df.columns.get_loc('matched')] -= 1
 
     final_overflow = sum(Decimal(str(x)) for x in output_df['matched']) - full_matching_funds_available
-    st.success(f'Matching funds adjusted in 1 iteration. Final overflow: {final_overflow / Decimal(10**matching_token_decimals)}')
-
+    #st.success(f'Matching funds adjusted in 1 iteration. Final overflow: {final_overflow / Decimal(10**matching_token_decimals)}')
+    if final_overflow > 0:
+        st.error('There is a matching overflow. Please contact the team for further assistance.')
     return output_df
 
 def display_matching_distribution(output_df):
