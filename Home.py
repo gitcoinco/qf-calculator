@@ -5,7 +5,7 @@ import plotly.graph_objs as go
 import plotly.express as px
 import utils
 import fundingutils
-import sys
+import math
 
 # Page configuration
 st.set_page_config(page_title="Matching Results", page_icon="assets/favicon.png", layout="wide")
@@ -416,11 +416,11 @@ def adjust_matching_overflow(output_df, matching_funds_available, matching_token
     
     while matching_overflow >= 0:
         st.warning('Potential Matching Overflow Detected. Adjusting Matching Funds')
-        matching_adjustment = int(matching_overflow / max(output_df['matched'].count(), 1))
+        matching_adjustment = math.ceil(matching_overflow / max(output_df['matched'].count(), 1))
         output_df['matched'] = output_df['matched'].apply(lambda x: str(max(int(x) - matching_adjustment, 0)))
         matching_overflow = sum(int(x) for x in output_df['matched']) - full_matching_funds_available
         st.warning(f'Adjusted Matching Overflow is {matching_overflow}') # IF THIS NUMBER IS NEGATIVE WE ARE GOOD TO GO
-    
+
     return output_df
 
 def display_matching_distribution(output_df):
