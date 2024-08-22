@@ -24,12 +24,55 @@ query_params_chain_id = st.query_params.get_all('chain_id')
 if len(query_params_chain_id) == 1 and not st.session_state.chain_id:
     st.session_state.chain_id = query_params_chain_id[0]
 
+def display_recent_rounds():
+    # Fetch and process round data
+    rounds = utils.get_round_summary()
+    current_time = pd.Timestamp.now(tz='UTC')
+    rounds = rounds[(rounds['donations_end_time'].dt.tz_convert('UTC') < current_time) & (rounds['votes'] > 0)]
+    rounds = rounds.sort_values('donations_end_time', ascending=False)
+
+    # Create round links and prepare display data
+    rounds['Round Link'] = rounds.apply(lambda row: f"https://qf-calculator.fly.dev/?round_id={row['round_id']}&chain_id={row['chain_id']}", axis=1)
+    rounds_display = rounds[['round_name', 'Round Link', 'votes', 'uniqueContributors', 'amountUSD']]
+    
+    # Configure column display
+    column_config = {
+        "Round Link": st.column_config.LinkColumn(
+            "Round Link",
+            display_text="Go to Round",
+            help="Click to view round details"
+        ),
+        "votes": st.column_config.NumberColumn(
+            "Total Votes",
+            help="Total number of votes in the round"
+        ),
+        "uniqueContributors": st.column_config.NumberColumn(
+            "Unique Contributors",
+            help="Number of unique contributors in the round"
+        ),
+        "amountUSD": st.column_config.NumberColumn(
+            "Total Amount (USD)",
+            help="Total amount donated in USD",
+            format="$%.2f"
+        )
+    }
+
+    # Display the dataframe
+    st.header("Recent Rounds That Have Ended:")
+    st.dataframe(
+        rounds_display.head(20),
+        column_config=column_config,
+        hide_index=True
+    )
+
+
 def validate_input():
     """Validate the presence of round_id and chain_id in the URL."""
     if st.session_state.round_id is None or st.session_state.chain_id is None:
         st.header("Oops! Something went wrong. You're not supposed to be here 🙈")
         st.subheader("Please provide round_id and chain_id in the URL")
         st.subheader('Example: https://qf-calculator.fly.dev/?round_id=23&chain_id=42161')
+        display_recent_rounds()
         st.stop()
     return st.session_state.round_id.lower(), int(st.session_state.chain_id)
 
@@ -469,7 +512,7 @@ def main():
         filter_in_csv = handle_csv_upload(purpose='filter in')
 
     half_and_half = False
-    with st.expander("Advanced: give results as half COCM / half QF"):
+    with st.expander("Advanced: Give results as half COCM / half QF"):
         st.write('''
             Toggle the switch below to calculate a matching result blending COCM and QF, instead of pure COCM.
             In this case, funding amounts will be found for each mechanism, normalized to the size of the matching pool, and then averaged for each project.
@@ -499,8 +542,8 @@ def main():
 
     # Quadratic Funding Method Comparison section
     st.header('💚 Quadratic Funding Method Comparison')
-    st.write('''Quadratic funding helps us solve coordination failures by creating a way for community members to fund what matters to them while amplifying their impact. However, its assumption that people make independent decisions can be exploited to unfairly influence the distribution of matching funds.''')
-    st.write('''Connection-oriented cluster-matching (COCM) doesn't make this assumption. Instead, it quantifies just how coordinated groups of actors are likely to be based on the social signals they have in common. Projects backed by more independent agents receive greater matching funds. Conversely, if a project's support network shows higher levels of coordination, the matching funds are reduced, encouraging self-organized solutions within more coordinated groups. ''')
+    st.write('''[Quadratic funding](https://wtfisqf.com) helps us solve coordination failures by creating a way for community members to fund what matters to them while amplifying their impact. However, its assumption that people make independent decisions can be exploited to unfairly influence the distribution of matching funds.''')
+    st.write('''[Connection-oriented cluster-matching (COCM)](https://wtfiscocm.streamlit.app/) doesn't make this assumption. Instead, it quantifies just how coordinated groups of actors are likely to be based on the social signals they have in common. Projects backed by more independent agents receive greater matching funds. Conversely, if a project's support network shows higher levels of coordination, the matching funds are reduced, encouraging self-organized solutions within more coordinated groups. ''')
     
     # Allow removal of projects from matching distribution
     all_projects = data['df']['project_name'].unique()

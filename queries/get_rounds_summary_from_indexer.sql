@@ -5,6 +5,8 @@ SELECT
     r."unique_donors_count" AS "uniqueContributors",
     r."chain_id",
     r."id" AS "round_id",
+    "donations_end_time" AS "donations_end_time",
+    "donations_start_time" AS "donations_start_time",
     (r."round_metadata" #>> '{quadraticFundingConfig, matchingCap}')::boolean AS "has_matching_cap",
     (r."round_metadata" #>> '{quadraticFundingConfig, matchingCapAmount}')::double precision AS "matching_cap_amount",
     (r."round_metadata" #>> '{quadraticFundingConfig, matchingFundsAvailable}')::double precision AS "matching_funds_available",
@@ -14,3 +16,6 @@ SELECT
     (r."round_metadata" #>> '{quadraticFundingConfig, sybilDefense}')::text AS "sybilDefense"
 FROM
     "public"."rounds" AS r
+WHERE
+     "donations_end_time" <= '2030-01-01'
+    AND (r."round_metadata" #>> '{name}')::text IS NOT NULL
