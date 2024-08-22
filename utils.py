@@ -198,7 +198,9 @@ def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['co
         42161: "arbitrum-one",
         43114: "avalanche",
         713715: "sei-devnet",
-        1329: "sei-mainnet"
+        1329: "sei-mainnet",
+        42220: "celo",
+        1088: "metisAndromeda"
     }
 
     native_tokens = {
@@ -208,7 +210,9 @@ def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['co
         42161: "ethereum",
         43114: "avalanche-2",
         713715: "sei-network",
-        1329: "sei-network"
+        1329: "sei-network",
+        42220: "celo-mainnet",
+        1088: "metis"
     }
 
     if chain_id not in platforms:

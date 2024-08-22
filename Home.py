@@ -105,7 +105,7 @@ def load_data(round_id, chain_id, filter_in_csv=None, filter_out_csv=None):
     """Load and process data for the specified round and chain."""
     blockchain_mapping = {1: "Ethereum", 10: "Optimism", 137: "Polygon", 250: "Fantom",
                           324: "ZKSync", 8453: "Base", 42161: "Arbitrum", 43114: "Avalanche",
-                          534352: "Scroll", 1329: "SEI"}
+                          534352: "Scroll", 1329: "SEI", 42220: "Celo", 1088: "Metis" }
     rounds = utils.get_round_summary()
     
     # """
