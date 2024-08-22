@@ -412,18 +412,14 @@ def adjust_matching_overflow(output_df, matching_funds_available, matching_token
     """Adjust matching funds if there's an overflow."""
     full_matching_funds_available = int(int(matching_funds_available) * 10**(int(matching_token_decimals)))
     matching_overflow = sum(int(x) for x in output_df['matched']) - full_matching_funds_available
-    
     while matching_overflow >= 0:
         st.warning('Potential Matching Overflow Detected. Adjusting Matching Funds')
-        matching_adjustment = -(-matching_overflow // max(output_df['matched'].count(), 1))
-        st.write(f'Overflow is {matching_overflow}.')
-        st.write(f'Adjusting Matching Funds by {matching_adjustment}')
-        st.write(f'There are {output_df["matched"].count()} projects')
-        st.write(f'That many projects adjusted by {matching_adjustment} will be {output_df["matched"].count() * matching_adjustment}')
-        output_df['matched'] = output_df['matched'].apply(lambda x: str(max(int(x) - matching_adjustment, 0)))
+        output_df['matched_pct'] = output_df['matched'] / output_df['matched'].sum()
+        output_df['matched'] = max(output_df['matched'] - (max(output_df['matched_pct'] * matching_overflow).apply(lambda x: int(x)),1),0)
         matching_overflow = sum(int(x) for x in output_df['matched']) - full_matching_funds_available
         st.warning(f'Adjusted Matching Overflow is {matching_overflow}') # IF THIS NUMBER IS NEGATIVE WE ARE GOOD TO GO
-
+    output_df['matched'] = output_df['matched'].apply(lambda x: int(x))
+    #output_df = output_df.drop(columns=['matched_pct'])
     return output_df
 
 def display_matching_distribution(output_df):
