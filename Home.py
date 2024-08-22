@@ -514,7 +514,7 @@ def main():
     # Matching distribution download section
     st.subheader('Download Matching Distribution')
     if calculate_percent_scored_voters(data) < 100:
-        st.warning('Matching distribution download is not recommended until 100% of addresses are scored. This could take 24-72 hours after the round concludes.')
+        st.warning('Matching distribution download is not recommended until 100% of addresses are scored. This could take up to 48 hours after the round concludes.')
     strategy_choice = select_matching_strategy(data['strat'])
     output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
     output_df = adjust_matching_overflow(output_df, data['rounds']['matching_funds_available'].values[0], data['config_df']['token_decimals'].iloc[0])
