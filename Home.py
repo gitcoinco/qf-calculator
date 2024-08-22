@@ -5,6 +5,9 @@ import plotly.graph_objs as go
 import plotly.express as px
 import utils
 import fundingutils
+from decimal import Decimal, getcontext
+import decimal
+
 
 # Page configuration
 st.set_page_config(page_title="Matching Results", page_icon="assets/favicon.png", layout="wide")
@@ -408,7 +411,6 @@ def prepare_output_dataframe(matching_df, strategy_choice, data):
     
     return output_df.fillna(0)
 
-from decimal import Decimal, getcontext
 
 def adjust_matching_overflow(output_df, matching_funds_available, matching_token_decimals):
     """Adjust matching funds if there's an overflow, using Decimal for high precision and handling numpy types."""
@@ -424,12 +426,10 @@ def adjust_matching_overflow(output_df, matching_funds_available, matching_token
     
     if matching_overflow <= 0:
         return output_df
-
     #st.warning(f'Initial Matching Overflow: {matching_overflow / Decimal(10**matching_token_decimals)}. Adjusting Matching Funds')
-
+    
     # Calculate the reduction factor
     reduction_factor = full_matching_funds_available / total_matched
-
     # Apply the reduction factor to all matched amounts
     output_df['matched'] = output_df['matched'].apply(lambda x: int(Decimal(str(x)) * reduction_factor))
 
@@ -444,6 +444,7 @@ def adjust_matching_overflow(output_df, matching_funds_available, matching_token
     #st.success(f'Matching funds adjusted in 1 iteration. Final overflow: {final_overflow / Decimal(10**matching_token_decimals)}')
     if final_overflow > 0:
         st.error('There is a matching overflow. Please contact the team for further assistance.')
+
     return output_df
 
 def display_matching_distribution(output_df):
@@ -585,7 +586,14 @@ def main():
     output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
     output_df = adjust_matching_overflow(output_df, data['rounds']['matching_funds_available'].values[0], data['config_df']['token_decimals'].iloc[0])
     display_matching_distribution(output_df)
-
+    with st.expander('Advanced: Matching Overflow Information', expanded=False):
+        try:
+            full_matching_funds_available = Decimal(str(data['rounds']['matching_funds_available'].iloc[0])) * Decimal(10**int(data['config_df']['token_decimals'].iloc[0]))
+            total_matched = sum(Decimal(str(x)) for x in output_df['matched'])
+            matching_overflow = total_matched - full_matching_funds_available
+            st.write(f" Matching Overflow: {(matching_overflow / Decimal(10**int(data['config_df']['token_decimals'].iloc[0]))):.18f} or {matching_overflow} wei")
+        except (ValueError, TypeError, decimal.InvalidOperation) as e:
+            st.error(f"Error calculating matching overflow: {str(e)}")
     # Summary section
     st.header('📈 Sharable Summary')
     token_code = data['config_df']['token_code'].iloc[0]
