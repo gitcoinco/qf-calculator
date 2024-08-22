@@ -1,5 +1,5 @@
 plotly
 streamlit
 pandas==2.0.3
-numpy
+numpy==1.24.3
 psycopg2-binary
