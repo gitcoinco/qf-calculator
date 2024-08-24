@@ -92,7 +92,17 @@ def load_passport_model_scores(addresses):
     params = {
         'addresses': addresses
     }
-    results = run_query(query, params)  
+    results = run_query(query, params)
+    # Load the parquet file
+    df = pd.read_parquet('data/gg21_donors_scored.parquet')
+    df = df[['Address', 'aggregate_score']]
+    df.columns = ['address', 'rawScore']
+
+    address_set = set(addresses)
+    missing_addresses = df[df['address'].isin(address_set) & ~df['address'].isin(results['address'])]
+    results = pd.concat([results, missing_addresses], ignore_index=True)
+    
+
     return results
 
 @st.cache_resource(ttl=ttl_long)
