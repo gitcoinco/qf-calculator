@@ -308,6 +308,17 @@ def display_passport_usage(data):
             n_users_passing_50 = len(data['scores'][(data['scores']['rawScore'] >= data['score_at_50_percent']) & (data['scores']['rawScore'] < data['score_at_100_percent'])])
             st.subheader(f" {n_users_passing_100} Users ({n_users_passing_100/total_voters*100:.1f}%) recieve full matching (passport model score over {data['score_at_100_percent']})")
             st.subheader(f" {n_users_passing_50} Users ({n_users_passing_50/total_voters*100:.1f}%) recieve partial matching (passport model score between {data['score_at_50_percent']} and {data['score_at_100_percent']})")
+            st.markdown("""
+                🔹 **Full matching:** User contributions are matched at 100% of the calculated amount.
+                
+                🔸 **Partial matching:** User contributions are matched between 50-100% of the calculated amount.
+                
+                📊 **Matching percentage is based on the user's passport model score:**
+                - Higher scores = Higher matching percentage
+                - Very low scores = No matching
+                
+                💡 This system encourages legitimate users to build stronger digital identities for better matching rates while protecting matching funds from sybils and airdrop farmers.
+            """)
             if num_filtered_in > 0:
                 st.write(f'{num_filtered_in} users manually filtered in')
 
@@ -456,7 +467,7 @@ def display_matching_distribution(output_df):
     for col in ['matched', 'totalReceived', 'sumOfSqrt', 'capOverflow', 'matchedWithoutCap']:
         display_df[col] = display_df[col].apply(lambda x: f"{x}")
     
-    st.write(display_df)
+    st.dataframe(display_df, use_container_width=True)
     
     # Use the original output_df for CSV download
     st.download_button(
