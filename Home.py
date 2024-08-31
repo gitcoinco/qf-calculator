@@ -289,6 +289,14 @@ def calculate_verified_vs_unverified(scores, donations_df, score_threshold):
     )
     return fig, summary_data
 
+def categorize_user(score, score_at_50_percent, score_at_100_percent):
+    if score >= score_at_100_percent:
+        return 'Full'
+    elif score >= score_at_50_percent:
+        return 'Partial'
+    else:
+        return 'Unmatched'
+                
 def display_passport_usage(data):
     """Display passport usage statistics if Sybil defense is enabled."""
     if data['sybilDefense'] != 'None':
@@ -319,6 +327,77 @@ def display_passport_usage(data):
                 
                 💡 This system encourages legitimate users to build stronger digital identities for better matching rates while protecting matching funds from sybils and airdrop farmers.
             """)
+
+
+            with st.expander("**Expand: Matching Breakdown by Project Information**"):
+                # Categorize donors based on their scores
+                data['scores']['category'] = data['scores']['rawScore'].apply(
+                    lambda score: categorize_user(score, data['score_at_50_percent'], data['score_at_100_percent'])
+                )
+                
+                # Merge dataframes and fill missing categories
+                merged_df = pd.merge(data['df'], data['scores'], left_on='voter', right_on='address', how='left')
+                merged_df['category'] = merged_df['category'].fillna('Unmatched')
+                
+                # Group and pivot data
+                grouped = merged_df.groupby(['project_name', 'category']).agg({
+                    'voter': 'nunique',
+                    'amountUSD': 'sum'
+                }).reset_index()
+                
+                pivot_df = grouped.pivot(index='project_name', columns='category', values=['voter', 'amountUSD'])
+                pivot_df.columns = [f'{col[1]}_{col[0]}' for col in pivot_df.columns]
+                pivot_df = pivot_df.reset_index()
+                
+                # Ensure all necessary columns exist
+                for cat in ['Unmatched', 'Partial', 'Full']:
+                    for val in ['voter', 'amountUSD']:
+                        if f'{cat}_{val}' not in pivot_df.columns:
+                            pivot_df[f'{cat}_{val}'] = 0
+                
+                # Rename columns for clarity
+                pivot_df = pivot_df.rename(columns={
+                    'Unmatched_voter': 'Unmatched Donors',
+                    'Partial_voter': 'Partial Donors',
+                    'Full_voter': 'Full Donors',
+                    'Unmatched_amountUSD': 'Unmatched Amount',
+                    'Partial_amountUSD': 'Partial Matched Amount',
+                    'Full_amountUSD': 'Full Matched Amount'
+                })
+                
+                # Calculate totals and percentages
+                pivot_df['Total Donors'] = pivot_df['Unmatched Donors'] + pivot_df['Partial Donors'] + pivot_df['Full Donors']
+                pivot_df['Percent Donors Matched'] = (pivot_df['Partial Donors'] + pivot_df['Full Donors']) / pivot_df['Total Donors'] * 100
+                
+                # Round amount columns
+                for col in ['Unmatched Amount', 'Partial Matched Amount', 'Full Matched Amount']:
+                    pivot_df[col] = pivot_df[col].round(2)
+                
+                # Reorder columns
+                column_order = ['project_name', 'Total Donors', 'Percent Donors Matched', 'Unmatched Donors', 'Partial Donors', 'Full Donors', 'Unmatched Amount', 'Partial Matched Amount', 'Full Matched Amount']
+                pivot_df = pivot_df[column_order]
+                
+                # Sort by percent of donors matched in descending order
+                pivot_df = pivot_df.sort_values('Percent Donors Matched', ascending=False)
+                
+                # Display the dataframe
+                st.dataframe(
+                    pivot_df,
+                    column_config={
+                        "project_name": "Project",
+                        "Total Donors": st.column_config.NumberColumn("Total Donors", format="%d"),
+                        "Percent Donors Matched": st.column_config.ProgressColumn("% Donors Matched", format="%.2f%%", min_value=0, max_value=100),
+                        "Unmatched Donors": st.column_config.NumberColumn("Unmatched Donors", format="%d"),
+                        "Partial Donors": st.column_config.NumberColumn("Partial Donors", format="%d"),
+                        "Full Donors": st.column_config.NumberColumn("Full Donors", format="%d"),
+                        "Unmatched Amount": st.column_config.NumberColumn("Unmatched Amount", format="$%.2f"),
+                        "Partial Matched Amount": st.column_config.NumberColumn("Partial Matched Amount", format="$%.2f"),
+                        "Full Matched Amount": st.column_config.NumberColumn("Full Matched Amount", format="$%.2f")
+                    },
+                    hide_index=True
+                )
+
+
             if num_filtered_in > 0:
                 st.write(f'{num_filtered_in} users manually filtered in')
 
