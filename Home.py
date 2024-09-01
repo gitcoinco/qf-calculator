@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objs as go
 import plotly.express as px
+import networkx as nx
 import utils
 import fundingutils
 from decimal import Decimal, getcontext
@@ -247,6 +248,138 @@ def handle_csv_upload(purpose='filter out'):
         return csv
     return None
 
+def display_network_graph(df):
+    """Display a 3D network graph of voters and grants."""
+    st.subheader('🌐 Connection Graph')
+    grants_color = '#00433B'
+    grantee_color_string = 'moss'
+    voters_color = '#C4F092'
+    voter_color_string = 'lightgreen'
+    line_color = '#6E9A82'
+    # Assuming 'data' is the DataFrame containing all donation information
+    
+    # Sum amountUSD grouped by voter and recipient_address
+    grouped_data = df.groupby(['voter', 'recipient_address']).agg({
+        'amountUSD': 'sum',
+        'project_name': 'first'  # Assuming project_name is constant for each recipient_address
+    }).reset_index()
+
+    count_connections = grouped_data.shape[0]
+    count_voters = grouped_data['voter'].nunique()
+    count_grants = grouped_data['recipient_address'].nunique()
+    max_connections = 2000
+    col1, col2 = st.columns([3, 1])
+        
+    with col1:
+        st.markdown("The below graph visualizes the connections between donors and grantees. " +
+                    f"Donors are represented by {voter_color_string} nodes, while grantees are represented by {grantee_color_string} nodes. " +
+                    f"Each line connecting a donor to a grantee represents a donation.")
+        st.markdown("In COCM, projects receive higher matching when their donors support a diverse range of other projects and have unique connection patterns. Conversely, projects get lower matching if their donors primarily support a small number of the same projects.")
+
+    with col2:
+        pct_to_sample = st.slider("Percentage of connections to sample", 
+                                  min_value=1, 
+                                  max_value=100, 
+                                  value=min(100, int(max_connections / count_connections * 100)),
+                                  step=1,
+                                  help="Adjust this to control the number of connections displayed in the graph. More connections means longer loading times")
+        st.markdown("**Go fullscreen with the arrows in the top-right for a better view.**")
+
+    num_connections_to_sample = int(count_connections * pct_to_sample / 100)
+    grouped_data = grouped_data.sample(n=min(num_connections_to_sample, max_connections), random_state=42)
+    count_connections = grouped_data.shape[0]
+
+
+    # Initialize a new Graph
+    B = nx.Graph()
+
+    # Create nodes with the bipartite attribute
+    B.add_nodes_from(grouped_data['voter'].unique(), bipartite=0, color=voters_color)
+    B.add_nodes_from(grouped_data['recipient_address'].unique(), bipartite=1, color=grants_color)
+
+    # Add edges with amountUSD as an attribute
+    for _, row in grouped_data.iterrows():
+        B.add_edge(row['voter'], row['recipient_address'], amountUSD=row['amountUSD'])
+
+    pos = nx.spring_layout(B, dim=3, k=0.09, iterations=50)
+
+    # Extract node information
+    node_x, node_y, node_z = zip(*pos.values())
+    node_names = list(pos.keys())
+    degrees = [B.degree(node_name) for node_name in node_names]
+    node_sizes = np.log(np.array(degrees) + 1) * 10
+
+    # Extract edge information
+    edge_x, edge_y, edge_z = [], [], []
+    edge_weights = []
+
+    for edge in B.edges(data=True):
+        x0, y0, z0 = pos[edge[0]]
+        x1, y1, z1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+        edge_z.extend([z0, z1, None])
+        edge_weights.append(edge[2]['amountUSD'])
+
+    # Create the edge traces
+    edge_trace = go.Scatter3d(
+        x=edge_x, y=edge_y, z=edge_z,
+        line=dict(width=1, color=line_color),
+        hoverinfo='none',
+        mode='lines',
+        marker=dict(opacity=0.5))
+
+    # Create the node traces
+    node_trace = go.Scatter3d(
+        x=node_x, y=node_y, z=node_z,
+        mode='markers',
+        hoverinfo='text',
+        marker=dict(
+            color=[data['color'] for _, data in B.nodes(data=True)],
+            size=node_sizes,
+            opacity=1,
+            sizemode='diameter'
+        ))
+
+    node_adjacencies = [len(list(B.neighbors(node))) for node in node_names]
+    node_trace.marker.color = [data['color'] for _, data in B.nodes(data=True)]
+
+    # Prepare text information for hovering
+    node_text = []
+    for node in node_names:
+        if node in grouped_data['voter'].values:
+            adj = len(list(B.neighbors(node)))
+            connections_text = f"Connections: {adj}" if pct_to_sample == 100 else f"Sampled Connections: {adj}"
+            node_text.append(f'Voter: {node[:6]}...{node[-4:]}<br>{connections_text}')
+        else:
+            project_name = grouped_data[grouped_data['recipient_address'] == node]['project_name'].iloc[0]
+            adj = len(list(B.neighbors(node)))
+            connections_text = f"Connections: {adj}" if pct_to_sample == 100 else f"Sampled Connections: {adj}"
+            node_text.append(f'Project: {project_name}<br>{connections_text}')
+    node_trace.text = node_text
+
+    # Create the figure
+    fig = go.Figure(data=[edge_trace, node_trace],
+                    layout=go.Layout(
+                        title=' ',
+                        titlefont=dict(size=20),
+                        showlegend=False,
+                        hovermode='closest',
+                        margin=dict(b=20, l=5, r=5, t=40),
+                        annotations=[dict(
+                            showarrow=False,
+                            text="Use your mouse to rotate, zoom, and pan around the 3D graph for a better view of connections.",
+                            xref="paper",
+                            yref="paper",
+                            x=0.005,
+                            y=-0.002)],
+                        scene=dict(
+                            xaxis_title='X Axis',
+                            yaxis_title='Y Axis',
+                            zaxis_title='Z Axis')))
+
+    st.plotly_chart(fig, use_container_width=True)
+
 def calculate_verified_vs_unverified(scores, donations_df, score_threshold):
     """Calculate and visualize the comparison between verified and unverified users."""
     verified_mask = scores['rawScore'] >= score_threshold
@@ -349,11 +482,13 @@ def display_passport_usage(data):
                 pivot_df.columns = [f'{col[1]}_{col[0]}' for col in pivot_df.columns]
                 pivot_df = pivot_df.reset_index()
                 
-                # Ensure all necessary columns exist
+                # Ensure all necessary columns exist and replace None with 0
                 for cat in ['Unmatched', 'Partial', 'Full']:
                     for val in ['voter', 'amountUSD']:
                         if f'{cat}_{val}' not in pivot_df.columns:
                             pivot_df[f'{cat}_{val}'] = 0
+                        else:
+                            pivot_df[f'{cat}_{val}'] = pivot_df[f'{cat}_{val}'].fillna(0)
                 
                 # Rename columns for clarity
                 pivot_df = pivot_df.rename(columns={
@@ -396,7 +531,6 @@ def display_passport_usage(data):
                     },
                     hide_index=True
                 )
-
 
             if num_filtered_in > 0:
                 st.write(f'{num_filtered_in} users manually filtered in')
@@ -667,6 +801,8 @@ def main():
     # Calculate and display matching results
     matching_df = calculate_matching_results(data)
     display_matching_results(matching_df, data['config_df']['token_code'].iloc[0], data['strat'])
+    display_network_graph(data['df'])
+
 
     # Matching distribution download section
     st.subheader('Download Matching Distribution')
