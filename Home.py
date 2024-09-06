@@ -347,15 +347,15 @@ def display_network_graph(df):
     # Prepare text information for hovering
     node_text = []
     for node in node_names:
-        if node in grouped_data['voter'].values:
-            adj = len(list(B.neighbors(node)))
-            connections_text = f"Connections: {adj}" if pct_to_sample == 100 else f"Sampled Connections: {adj}"
-            node_text.append(f'Voter: {node[:6]}...{node[-4:]}<br>{connections_text}')
-        else:
+        if node in grouped_data['recipient_address'].values:
             project_name = grouped_data[grouped_data['recipient_address'] == node]['project_name'].iloc[0]
             adj = len(list(B.neighbors(node)))
             connections_text = f"Connections: {adj}" if pct_to_sample == 100 else f"Sampled Connections: {adj}"
             node_text.append(f'Project: {project_name}<br>{connections_text}')
+        else:
+            adj = len(list(B.neighbors(node)))
+            connections_text = f"Connections: {adj}" if pct_to_sample == 100 else f"Sampled Connections: {adj}"
+            node_text.append(f'Voter: {node[:6]}...{node[-4:]}<br>{connections_text}')
     node_trace.text = node_text
 
     # Create the figure
