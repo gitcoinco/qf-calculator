@@ -689,7 +689,7 @@ def display_matching_distribution(output_df):
         file_name='matching_distribution.csv',
         mime='text/csv'
     )
-    st.write('You can upload this CSV to manager.gitcoin.co to apply the matching results to your round')
+    st.write('You can upload this CSV to manager.gitcoin.co to apply the matching results to your round.')
     st.write('Note: If manual edits are needed, the key column to update is "matched". Values must be integers without decimals or commas, as our contracts expect token amounts in their smallest unit (e.g., wei for ETH). Incorrect formatting could cause errors in fund allocation.')
 
 def create_summary_dataframe(output_df, matching_df, token_code, s):
