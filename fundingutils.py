@@ -305,7 +305,7 @@ def standard_donation(donation_df):
   funding = {p: donation_df[p].sum() for p in projects}
   return funding
 
-def apply_voting_eligibility(votes_data, min_donation_threshold, score_at_50_percent, score_at_100_percent, filter_in_list):
+def apply_voting_eligibility(votes_data, min_donation_threshold, score_at_50_percent, score_at_100_percent, scaling_df):
     votes_data['self_vote'] = (votes_data['voter'] == votes_data['recipient_address']).astype(int) 
     votes_data['low_score'] = (votes_data['rawScore'] < score_at_50_percent).astype(int) 
     votes_data['low_amount'] = (votes_data['amountUSD'] < min_donation_threshold).astype(int) 
@@ -324,8 +324,9 @@ def apply_voting_eligibility(votes_data, min_donation_threshold, score_at_50_per
     # If the score is not a base vote , set the scaling factor to 0
     votes_data.loc[votes_data['base_vote'] == 0, 'amountUSD'] = 0
 
-    # Lastly, reset the donations of anyone in the filter-in list
-    votes_data.loc[votes_data['voter'].isin(filter_in_list), 'amountUSD'] = votes_data.loc[votes_data['voter'].isin(filter_in_list), 'starting_amountUSD']
+    if type(scaling_df) == pd.DataFrame:
+      # reset scaling factors as determined by manual user input
+      votes_data['amountUSD'] = votes_data.apply(lambda row: row['starting_amountUSD'] * scaling_df.loc[row['voter'],'scale'] if row['voter'] in scaling_df.index else row['amountUSD'], axis=1)
 
     return votes_data
 

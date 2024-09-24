@@ -102,7 +102,7 @@ def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
         sybilDefense = 'None'
     return scores, score_at_50_percent, score_at_100_percent, sybilDefense
 
-def load_data(round_id, chain_id, filter_in_csv=None, filter_out_csv=None):
+def load_data(round_id, chain_id):
     """Load and process data for the specified round and chain."""
     blockchain_mapping = {1: "Ethereum", 10: "Optimism", 137: "Polygon", 250: "Fantom",
                           324: "ZKSync", 8453: "Base", 42161: "Arbitrum", 43114: "Avalanche",
@@ -121,14 +121,6 @@ def load_data(round_id, chain_id, filter_in_csv=None, filter_out_csv=None):
     sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else 'None'
     df = utils.get_round_votes(round_id, chain_id)
     
-    if filter_out_csv is not None:
-        df = process_filterout_csv(df, filter_out_csv)
-    
-    if filter_in_csv is not None:
-        filter_in_list = list(filter_in_csv['address'].str.lower())
-    else:
-        filter_in_list = []
-
     # Fetch token configuration and price
     config_df = utils.fetch_tokens_config()
     config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
@@ -153,23 +145,7 @@ def load_data(round_id, chain_id, filter_in_csv=None, filter_out_csv=None):
         "score_at_100_percent": score_at_100_percent,
         "sybilDefense": sybilDefense,
         "chain_id": chain_id,
-        "filter_in_list": filter_in_list
     }
-
-def process_filterout_csv(df, csv):
-    """Process uploaded CSV file for wallet filtering."""
-    csv['address'] = csv['address'].str.lower()
-    df['voter'] = df['voter'].str.lower()
-    df['flagged'] = df['voter'].isin(csv['address'])
-    flagged_votes_count = df["flagged"].sum()
-    unique_flagged_voters_count = df[df['flagged']]['voter'].nunique()
-    
-    st.markdown(f"**Flagged Votes:** {flagged_votes_count}")
-    st.markdown(f"**Unique Flagged Voters:** {unique_flagged_voters_count}")
-    filter_flagged = st.toggle('Filter out flagged votes')
-    if filter_flagged:
-        df = df[~df['flagged']]
-    return df
 
 def display_round_settings(data):
     """Display the settings and statistics for the current round."""
@@ -240,6 +216,8 @@ def handle_csv_upload(purpose='filter out'):
         st.write('Upload a CSV file with a single column named "address" containing the ETH addresses to filter out. Addresses should include the 0x prefix.')
     if purpose == 'filter in':
         st.write('Upload a CSV file with a single column named "address" containing the ETH addresses to filter in. Addresses should include the 0x prefix. These addresses will be exempt from passport-based sybil detection.')
+    if purpose == 'general scaling':
+        st.write('Upload a CSV file with a column named "address" and a column named "scale". Addresses listed in the CSV will bypass passport scaling and instead have their contributions scaled by the amount listed. You do not need to include every address.')
     uploaded_file = st.file_uploader("Upload a CSV file", type="csv", key=purpose)
     if uploaded_file is not None:
         csv = pd.read_csv(uploaded_file)
@@ -435,12 +413,12 @@ def display_passport_usage(data):
     if data['sybilDefense'] != 'None':
         st.header('🛂 Passport Usage')
         display_scores_progress_bar(data)
-        num_filtered_in = len(data['filter_in_list'])
+        num_adjusted = len(data['scaling_df'])
         total_voters = data['df']['voter'].nunique()
         if data['sybilDefense'] in ['Passport Stamps', 'Avalanche Passport']:
             st.subheader(f" {len(data['scores'])} Users ({len(data['scores'])/total_voters*100:.1f}%) Have a Passport Score")
-            if num_filtered_in > 0:
-                st.write(f'{num_filtered_in} users manually filtered in')
+            if num_adjusted > 0:
+                st.write(f'{num_adjusted} users had scores manually adjusted')
             passport_usage_fig, passport_usage_df = calculate_verified_vs_unverified(data['scores'], data['df'], data['score_at_50_percent'])
             st.plotly_chart(passport_usage_fig, use_container_width=True)
         if data['sybilDefense'] == 'Passport Model Based Detection System':
@@ -543,7 +521,7 @@ def calculate_matching_results(data):
         data['rounds'].get('min_donation_threshold_amount', 0).values[0],
         data['score_at_50_percent'],
         data['score_at_100_percent'],
-        data['filter_in_list']
+        data['scaling_df']
     )
     votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
     
@@ -753,11 +731,11 @@ def main():
     round_id, chain_id = validate_input()
     
     # Advanced options 
-    with st.expander("Advanced: Filter Out Wallets", expanded=False):
-        filter_out_csv = handle_csv_upload(purpose='filter out')
 
-    with st.expander("Advanced: Filter In Wallets", expanded=False):
-        filter_in_csv = handle_csv_upload(purpose='filter in')
+    scaling_df=None
+    with st.expander("Advanced: Override Passport Scaling")
+        scaling_df = handle_csv_upload(purpose='general scaling')
+        scaling_df.set_index('address', inplace=True)
 
     half_and_half = False
     with st.expander("Advanced: Give results as half COCM / half QF"):
@@ -768,7 +746,9 @@ def main():
         half_and_half = st.toggle('Select for half-and-half')
 
     # Load and process data
-    data = load_data(round_id, chain_id, filter_out_csv=filter_out_csv, filter_in_csv=filter_in_csv)
+    data = load_data(round_id, chain_id)
+    data['scaling_df'] = scaling_df
+
 
     if half_and_half == True:
         data['strat'] = 'half-and-half'
