@@ -413,7 +413,9 @@ def display_passport_usage(data):
     if data['sybilDefense'] != 'None':
         st.header('🛂 Passport Usage')
         display_scores_progress_bar(data)
-        num_adjusted = len(data['scaling_df'])
+        num_adjusted = 0
+        if data['scaling_df'] is not None:
+            num_adjusted = len(data['scaling_df'])
         total_voters = data['df']['voter'].nunique()
         if data['sybilDefense'] in ['Passport Stamps', 'Avalanche Passport']:
             st.subheader(f" {len(data['scores'])} Users ({len(data['scores'])/total_voters*100:.1f}%) Have a Passport Score")
@@ -510,9 +512,6 @@ def display_passport_usage(data):
                     hide_index=True
                 )
 
-            if num_filtered_in > 0:
-                st.write(f'{num_filtered_in} users manually filtered in')
-
 def calculate_matching_results(data):
     """Calculate matching results using different strategies (COCM and QF)."""
     # Apply voting eligibility based on passport scores and donation thresholds
@@ -528,23 +527,24 @@ def calculate_matching_results(data):
     matching_cap_amount = data['rounds']['matching_cap_amount'].astype(float).values[0]
     matching_amount = data['rounds']['matching_funds_available'].astype(float).values[0]
     
-    # right now data['strat'] is either "half-and-half" or "COCM"
-    s = data['strat']
-
-    # Calculate matching amounts using both COCM and QF strategies
-    matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df_with_passport, matching_cap_amount, matching_amount, cluster_df=votes_df_with_passport) 
-                    for strategy in [s, 'QF']]
     
+    # Calculate matching amounts using both COCM and QF strategies
+    
+    matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df_with_passport, matching_cap_amount, matching_amount, cluster_df=votes_df_with_passport, pct_cocm=data['pct_COCM']) 
+                    for strategy in [data['strat'], 'QF']]
+
+
+
     # Merge results from both strategies
-    matching_df = pd.merge(matching_dfs[0], matching_dfs[1], on='project_name', suffixes=(f'_{s}', '_QF'))
+    matching_df = pd.merge(matching_dfs[0], matching_dfs[1], on='project_name', suffixes=(f'_{data["suffix"]}', '_QF'))
     
     # Add project details and calculate the difference between COCM and QF matching
     df_unique = data['df'][['project_name', 'chain_id', 'round_id', 'application_id']].drop_duplicates()
     matching_df = pd.merge(matching_df, df_unique, on='project_name', how='left')
     matching_df['Project Page'] = 'https://explorer.gitcoin.co/#/round/' + matching_df['chain_id'].astype(str) + '/' + matching_df['round_id'].astype(str) + '/' + matching_df['application_id'].astype(str)
-    matching_df['Δ Match'] = matching_df[f'matching_amount_{s}'] - matching_df['matching_amount_QF']
+    matching_df['Δ Match'] = matching_df[f'matching_amount_{data["suffix"]}'] - matching_df['matching_amount_QF']
     
-    return matching_df.sort_values(f'matching_amount_{s}', ascending=False)
+    return matching_df.sort_values(f'matching_amount_{data["suffix"]}', ascending=False)
 
 def display_matching_results(matching_df, matching_token_symbol, s):
     """Display the matching results in a formatted table."""
@@ -733,27 +733,40 @@ def main():
     # Advanced options 
 
     scaling_df=None
-    with st.expander("Advanced: Override Passport Scaling")
+    with st.expander("Advanced: Override Passport Scaling"):
         scaling_df = handle_csv_upload(purpose='general scaling')
-        scaling_df.set_index('address', inplace=True)
+        if scaling_df is not None:
+            scaling_df.set_index('address', inplace=True)
 
-    half_and_half = False
-    with st.expander("Advanced: Give results as half COCM / half QF"):
-        st.write('''
-            Toggle the switch below to calculate a matching result blending COCM and QF, instead of pure COCM.
-            In this case, funding amounts will be found for each mechanism, normalized to the size of the matching pool, and then averaged for each project.
-            E.g. if a project gets 10% of the matching pool under COCM and 40% of the matching pool under QF, they will get 25% of the matching pool under this calculation.''')
-        half_and_half = st.toggle('Select for half-and-half')
+    # half_and_half = False
+    # with st.expander("Advanced: Give results as half COCM / half QF"):
+    #     st.write('''
+    #         Toggle the switch below to calculate a matching result blending COCM and QF, instead of pure COCM.
+    #         In this case, funding amounts will be found for each mechanism, normalized to the size of the matching pool, and then averaged for each project.
+    #         E.g. if a project gets 10% of the matching pool under COCM and 40% of the matching pool under QF, they will get 25% of the matching pool under this calculation.''')
+    #     half_and_half = st.toggle('Select for half-and-half')
 
+    pct = 1
+    with st.expander('Advanced: Blend COCM and QF'):
+        st.write('''Use the slider below to blend COCM and QF together in your results. 
+                    Funding amounts will be found for each mechanism, normalized to the size of the matching pool, and then blended for each project. 
+                    Set the slider to "1" to just use COCM.
+                    Pure QF results are always available separately.''')
+        c1,c2,c3 = st.columns(3)
+        pct = c1.slider('Percent COCM', min_value = 0.25, max_value=1.0, value=1.0, step=0.25)
     # Load and process data
     data = load_data(round_id, chain_id)
     data['scaling_df'] = scaling_df
 
 
-    if half_and_half == True:
-        data['strat'] = 'half-and-half'
-    else:
+    if pct == 1:
         data['strat'] = 'COCM'
+        data['suffix'] = 'COCM'
+        data['pct_COCM'] = 1
+    else:
+        data['strat'] = 'pctCOCM'
+        data['suffix'] = (str(pct)+'0')[2:4]+'pctCOCM'
+        data['pct_COCM'] = pct
 
     # Display various settings of the round
     display_round_settings(data)
@@ -780,7 +793,7 @@ def main():
     
     # Calculate and display matching results
     matching_df = calculate_matching_results(data)
-    display_matching_results(matching_df, data['config_df']['token_code'].iloc[0], data['strat'])
+    display_matching_results(matching_df, data['config_df']['token_code'].iloc[0], data['suffix'])
     display_network_graph(data['df'])
 
 
@@ -788,7 +801,7 @@ def main():
     st.subheader('Download Matching Distribution')
     if calculate_percent_scored_voters(data) < 100:
         st.warning('Matching distribution download is not recommended until 100% of addresses are scored. This could take 24-72 hours after the round concludes.')
-    strategy_choice = select_matching_strategy(data['strat'])
+    strategy_choice = select_matching_strategy(data['suffix'])
     output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
     output_df = adjust_matching_overflow(output_df, data['rounds']['matching_funds_available'].values[0], data['config_df']['token_decimals'].iloc[0])
     display_matching_distribution(output_df)
@@ -803,7 +816,7 @@ def main():
     # Summary section
     st.header('📈 Sharable Summary')
     token_code = data['config_df']['token_code'].iloc[0]
-    summary_df = create_summary_dataframe(output_df, matching_df, token_code, data['strat'])
+    summary_df = create_summary_dataframe(output_df, matching_df, token_code, data['suffix'])
     display_summary(summary_df)
 
     #matching_distribution_chart = create_matching_distribution_chart(summary_df, token_code)

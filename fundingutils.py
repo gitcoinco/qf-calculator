@@ -345,7 +345,7 @@ def crossfade(dict_1, dict_2, pct=0.5):
   return {p: (dict_1[p] * pct) + (dict_2[p] * (1-pct)) for p in dict_1.keys()}
 
 @st.cache_resource(ttl=36000)
-def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cluster_df = None):
+def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cluster_df = None, pct_cocm=None):
     projects = donation_df.columns
     if algo == 'donation_profile_clustermatch':
         funding = donation_profile_clustermatch(donation_df)
@@ -361,6 +361,10 @@ def get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cl
         cocm_normalized = normalize(COCM(donation_df, cluster_df))
         std_qf_normalized = normalize(standard_qf(donation_df))
         funding = crossfade(cocm_normalized, std_qf_normalized)
+    elif algo == 'pctCOCM':
+        cocm_normalized = normalize(COCM(donation_df, cluster_df))
+        std_qf_normalized = normalize(standard_qf(donation_df))
+        funding = crossfade(cocm_normalized, std_qf_normalized, pct=pct_cocm)
     else:
         funding = standard_qf(donation_df)
     funding_normalized = normalize(funding)
