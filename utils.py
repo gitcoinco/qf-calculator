@@ -201,6 +201,7 @@ def fetch_tokens_config():
 @st.cache_resource(ttl=ttl_long)
 def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['coingecko']['COINGECKO_API_KEY'], coingecko_api_url="https://api.coingecko.com/api/v3"):
     """Fetch the latest price for a given token on a specific chain."""
+    # https://github.com/gitcoinco/grants-stack-indexer/blob/main/src/prices/coinGecko.ts
     platforms = {
         1: "ethereum",
         250: "fantom",
@@ -210,7 +211,8 @@ def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['co
         713715: "sei-devnet",
         1329: "sei-mainnet",
         42220: "celo",
-        1088: "metisAndromeda"
+        1088: "metisAndromeda",
+        42: "lukso-mainnet"
     }
 
     native_tokens = {
@@ -222,7 +224,9 @@ def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['co
         713715: "sei-network",
         1329: "sei-network",
         42220: "celo-mainnet",
-        1088: "metis"
+        1088: "metis",
+        42: "lukso-token"
+
     }
 
     if chain_id not in platforms:
