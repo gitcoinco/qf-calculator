@@ -31,13 +31,21 @@ def binarize(df):
   return df.applymap(lambda x: 1 if x > 0 else 0)
 
 def align(donation_df, cluster_df):
+
   # first, drop users who haven't made any donations / aren't in any clusters
   cluster_df.drop(cluster_df.index[cluster_df.apply(lambda row: all(row == 0), axis=1)],inplace=True)
   donation_df.drop(donation_df.index[donation_df.apply(lambda row: all(row == 0), axis=1)],inplace=True)
 
+  # drop projects without any donors / clusters without any members
+  projs_to_drop = [z for z in donation_df.columns if donation_df[z].sum() == 0]
+  clusters_to_drop = [z for z in cluster_df.columns if cluster_df[z].sum() == 0]
+  donation_df.drop(projs_to_drop, axis=1, inplace=True)
+  cluster_df.drop(clusters_to_drop, axis=1, inplace=True)
+
   # Also remove wallets that are just in one dataframe, but not the other
   cluster_df.drop(set(cluster_df.index) - set(donation_df.index), inplace=True)
   donation_df.drop(set(donation_df.index) - set(cluster_df.index), inplace=True)
+
 
   #make sure the indices are sorted the same way (important for making sure the matrix multiplications work later)
   cluster_df.sort_index(inplace=True)

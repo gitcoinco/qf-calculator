@@ -534,7 +534,6 @@ def calculate_matching_results(data):
                     for strategy in [data['strat'], 'QF']]
 
 
-
     # Merge results from both strategies
     matching_df = pd.merge(matching_dfs[0], matching_dfs[1], on='project_name', suffixes=(f'_{data["suffix"]}', '_QF'))
     
