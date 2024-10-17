@@ -218,12 +218,17 @@ def handle_csv_upload(purpose='filter out'):
         st.write('Upload a CSV file with a single column named "address" containing the ETH addresses to filter in. Addresses should include the 0x prefix. These addresses will be exempt from passport-based sybil detection.')
     if purpose == 'general scaling':
         st.write('Upload a CSV file with a column named "address" and a column named "scale". Addresses listed in the CSV will bypass passport scaling and instead have their contributions scaled by the amount listed. You do not need to include every address.')
-        st.write('Alternatively, upload a CSV file with a single column named "address", and those addresses will bypass passport scaling (this is the same as including a "scale" column with a value of 1 for every address in the csv).')
     uploaded_file = st.file_uploader("Upload a CSV file", type="csv", key=purpose)
     if uploaded_file is not None:
         csv = pd.read_csv(uploaded_file)
         st.write("CSV file uploaded successfully. Here's a preview:")
         st.write(csv.head())
+
+        csv.set_index('address', inplace=True)
+        if purpose == 'filter in':
+            csv['scale'] = 1
+        if purpose == 'filter out':
+            csv['scale'] = 0
         return csv
     return None
 
@@ -732,13 +737,25 @@ def main():
     
     # Advanced options 
 
+    filterin_df=None
+    filterout_df=None
+    arbitrary_df=None
     scaling_df=None
     with st.expander("Advanced: Override Passport Scaling"):
-        scaling_df = handle_csv_upload(purpose='general scaling')
-        if scaling_df is not None:
-            scaling_df.set_index('address', inplace=True)
-            if 'scale' not in scaling_df.columns:
-                scaling_df['scale'] = 1
+
+        
+        if st.toggle('Filter in wallets', value=False, key='filterin-toggle'):
+            filterout_df = handle_csv_upload(purpose='filter in')
+
+        if st.toggle('Filter out wallets',value=False,key='filterout-toggle'):
+            filterin_df = handle_csv_upload(purpose='filter out')
+
+        if st.toggle('Arbitrary scaling (e.g. Tunable QF)',value=False,key='arbitraryscale-toggle'):
+            arbitrary_df = handle_csv_upload(purpose='general scaling')
+
+    uploaded_dfs = [x for x in [filterin_df, filterout_df, arbitrary_df] if x is not None]
+    if len(uploaded_dfs) >= 1:
+        scaling_df = pd.concat(uploaded_dfs)
 
     # half_and_half = False
     # with st.expander("Advanced: Give results as half COCM / half QF"):
