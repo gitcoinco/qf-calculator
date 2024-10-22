@@ -145,6 +145,8 @@ def load_data(round_id, chain_id):
         "score_at_100_percent": score_at_100_percent,
         "sybilDefense": sybilDefense,
         "chain_id": chain_id,
+        "matching_cap": rounds['matching_cap_amount'].values[0],
+        "matching_available": data['rounds']['matching_funds_available'].values[0],
     }
 
 def display_round_settings(data):
@@ -153,10 +155,10 @@ def display_round_settings(data):
     st.header(f"⚙️ Round Settings")
     col1, col2 = st.columns(2)
     col1.write(f"**Chain:** {data['blockchain_mapping'][data['chain_id']]}")
-    col1.write(f"**Matching Cap:** {data['rounds']['matching_cap_amount'].values[0]:.2f}%")
+    col1.write(f"**Matching Cap:** {data['matching_cap']:.2f}%")
     col1.write(f"**Passport Defense Selected:** {data['sybilDefense']}")
     col1.write(f"**Number of Unique Voters:** {data['df']['voter'].nunique()}")
-    col2.write(f"**Matching Available:** {data['rounds']['matching_funds_available'].values[0]:.2f} {data['config_df']['token_code'].iloc[0]}")
+    col2.write(f"**Matching Available:** {data['matching_available']:.2f} {data['config_df']['token_code'].iloc[0]}")
     col2.write(f"**Matching Token Price:** ${data['matching_token_price']:.2f}")
     col2.write(f"**Minimum Donation Threshold Amount:** ${data['rounds'].get('min_donation_threshold_amount', 0).values[0]:.2f}")
     col2.write(f"**Number of Unique Projects:** {data['df']['project_name'].nunique()}")
@@ -530,8 +532,8 @@ def calculate_matching_results(data):
     )
     votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
     
-    matching_cap_amount = data['rounds']['matching_cap_amount'].astype(float).values[0]
-    matching_amount = data['rounds']['matching_funds_available'].astype(float).values[0]
+    matching_cap_amount = data['matching_cap'].astype(float).values[0]
+    matching_amount = data['matching_available'].astype(float).values[0]
     
     
     # Calculate matching amounts using both COCM and QF strategies
@@ -757,14 +759,6 @@ def main():
     if len(uploaded_dfs) >= 1:
         scaling_df = pd.concat(uploaded_dfs)
 
-    # half_and_half = False
-    # with st.expander("Advanced: Give results as half COCM / half QF"):
-    #     st.write('''
-    #         Toggle the switch below to calculate a matching result blending COCM and QF, instead of pure COCM.
-    #         In this case, funding amounts will be found for each mechanism, normalized to the size of the matching pool, and then averaged for each project.
-    #         E.g. if a project gets 10% of the matching pool under COCM and 40% of the matching pool under QF, they will get 25% of the matching pool under this calculation.''')
-    #     half_and_half = st.toggle('Select for half-and-half')
-
     pct = 1
     with st.expander('Advanced: Blend COCM and QF'):
         st.write('''Use the slider below to blend COCM and QF together in your results. 
@@ -787,10 +781,17 @@ def main():
         data['suffix'] = (str(pct)+'0')[2:4]+'pctCOCM'
         data['pct_COCM'] = pct
 
+
+    matching_pool_size_override = None
+    with st.expander('Advanced: Change Matching Pool Size'):
+        matching_pool_size_override = st.number_input(f"New matching pool size (in {data['config_df']['token_code'].iloc[0]}): ", value=float(data['matching_amount']), min_value=1)
     # Display various settings of the round
+    if matching_pool_size_override is not None:
+        data['matching_available'] = matching_pool_size_override
+
     display_round_settings(data)
 
-    matching_amount = data['rounds']['matching_funds_available'].astype(float).values[0]
+    matching_amount = data['matching_available'].astype(float).values[0]
     matching_amount_display = data['matching_token_price'] * matching_amount
 
     # Crowdfunding stats section
@@ -822,11 +823,11 @@ def main():
         st.warning('Matching distribution download is not recommended until 100% of addresses are scored. This could take 24-72 hours after the round concludes.')
     strategy_choice = select_matching_strategy(data['suffix'])
     output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
-    output_df = adjust_matching_overflow(output_df, data['rounds']['matching_funds_available'].values[0], data['config_df']['token_decimals'].iloc[0])
+    output_df = adjust_matching_overflow(output_df, data['matching_available'], data['config_df']['token_decimals'].iloc[0])
     display_matching_distribution(output_df)
     with st.expander('Advanced: Matching Overflow Information', expanded=False):
         try:
-            full_matching_funds_available = Decimal(str(data['rounds']['matching_funds_available'].iloc[0])) * Decimal(10**int(data['config_df']['token_decimals'].iloc[0]))
+            full_matching_funds_available = Decimal(str(data['matching_available'])) * Decimal(10**int(data['config_df']['token_decimals'].iloc[0]))
             total_matched = sum(Decimal(str(x)) for x in output_df['matched'])
             matching_overflow = total_matched - full_matching_funds_available
             st.write(f" Matching Overflow: {(matching_overflow / Decimal(10**int(data['config_df']['token_decimals'].iloc[0]))):.18f} or {matching_overflow} wei")
