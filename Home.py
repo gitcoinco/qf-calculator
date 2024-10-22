@@ -146,7 +146,7 @@ def load_data(round_id, chain_id):
         "sybilDefense": sybilDefense,
         "chain_id": chain_id,
         "matching_cap": rounds['matching_cap_amount'].values[0],
-        "matching_available": data['rounds']['matching_funds_available'].values[0],
+        "matching_available": rounds['matching_funds_available'].values[0],
     }
 
 def display_round_settings(data):
@@ -784,14 +784,14 @@ def main():
 
     matching_pool_size_override = None
     with st.expander('Advanced: Change Matching Pool Size'):
-        matching_pool_size_override = st.number_input(f"New matching pool size (in {data['config_df']['token_code'].iloc[0]}): ", value=float(data['matching_amount']), min_value=1)
+        matching_pool_size_override = st.number_input(f"New matching pool size (in {data['config_df']['token_code'].iloc[0]}): ", value=float(data['matching_available']), min_value=1.0)
     # Display various settings of the round
     if matching_pool_size_override is not None:
         data['matching_available'] = matching_pool_size_override
 
     display_round_settings(data)
 
-    matching_amount = data['matching_available'].astype(float).values[0]
+    matching_amount = data['matching_available']
     matching_amount_display = data['matching_token_price'] * matching_amount
 
     # Crowdfunding stats section
