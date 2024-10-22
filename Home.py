@@ -145,11 +145,10 @@ def load_data(round_id, chain_id):
         "score_at_100_percent": score_at_100_percent,
         "sybilDefense": sybilDefense,
         "chain_id": chain_id,
-<<<<<<< HEAD
+
         "matching_cap": rounds['matching_cap_amount'].values[0],
         "matching_available": rounds['matching_funds_available'].values[0],
-=======
->>>>>>> 1e5084294a442ec95a1d2a920e4aa3c58a69d889
+
     }
 
 def display_round_settings(data):
