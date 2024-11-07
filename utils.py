@@ -100,7 +100,7 @@ def load_passport_model_scores(addresses):
     df_22 = pd.read_csv('data/gg22_donors_scored.csv')
     df_22 = df_22[['Address', 'aggregate_score']]
     df_22.columns = ['address', 'rawScore']
-    df_22 = df_22.dropna(subset=['rawScore'])
+    df_22['rawScore'] = df_22['rawScore'].fillna(0)
     df = pd.concat([df, df_22], ignore_index=True)
     df['address'] = df['address'].str.lower()
     df = df.drop_duplicates(subset='address', keep='last')
