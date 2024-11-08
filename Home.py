@@ -126,7 +126,27 @@ def load_data(round_id, chain_id):
     # st.write(rt[rt['uniqueContributors'] > 0].head(20))
 
     rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)] # FILTER BY ROUND_ID AND CHAIN_ID
-
+    if round_id == '11' and chain_id == 1329:
+        rounds = pd.DataFrame()
+        round_data = {
+            'round_name': ['Sei Creator Fund Round #3 - Developer Ecosystem'],
+            'amountUSD': [41352.29],
+            'votes': [7428],
+            'uniqueContributors': [2755],
+            'chain_id': [1329],
+            'round_id': ['11'],
+            'donations_end_time': ['October 17, 2024, 4:00 PM'],
+            'donations_start_time': ['October 3, 2024, 4:00 PM'],
+            'has_matching_cap': [True],
+            'matching_cap_amount': [10],
+            'matching_funds_available': [833333],
+            'token': ['0x0000000000000000000000000000000000000000'],
+            'has_min_donation_threshold': [False],
+            'min_donation_threshold_amount': [0.0],
+            'sybilDefense': ['none']
+        }
+        rounds = pd.concat([rounds, pd.DataFrame(round_data)], ignore_index=True)
+    
     token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
     sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else 'None'
     df = utils.get_round_votes(round_id, chain_id)
@@ -840,8 +860,8 @@ def main():
 
     # Matching distribution download section
     st.subheader('Download Matching Distribution')
-    if calculate_percent_scored_voters(data) < 100:
-        st.warning('Matching distribution download is not recommended until 100% of addresses are scored. This could take 24-72 hours after the round concludes.')
+    if calculate_percent_scored_voters(data) < 99:
+        st.warning('Matching distribution download is not recommended until more addresses are scored. This could take 24-72 hours after the round concludes.')
     strategy_choice = select_matching_strategy(data['suffix'])
     output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
     output_df = adjust_matching_overflow(output_df, data['matching_available'], data['config_df']['token_decimals'].iloc[0])
