@@ -64,7 +64,8 @@ def display_recent_rounds():
     # Display the dataframe
     st.header("Recent Rounds That Have Ended:")
     st.dataframe(
-        rounds_display.head(20),
+        #rounds_display.head(20),
+        rounds_display,
         column_config=column_config,
         hide_index=True
     )
@@ -101,6 +102,15 @@ def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
         score_at_50_percent = score_at_100_percent = 0
         sybilDefense = 'None'
     return scores, score_at_50_percent, score_at_100_percent, sybilDefense
+
+def check_round_existence(round_id, chain_id):
+    rounds = utils.get_round_summary()
+    rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)] # FILTER BY ROUND_ID AND CHAIN_ID
+    if len(rounds) == 0:
+        st.write('## We could not find your round in our data.')
+        st.write('')
+        display_recent_rounds()
+        st.stop()
 
 def load_data(round_id, chain_id):
     """Load and process data for the specified round and chain."""
@@ -739,6 +749,8 @@ def main():
     st.image('assets/657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width=200)
     round_id, chain_id = validate_input()
     
+    check_round_existence(round_id, chain_id)
+
     # Advanced options 
 
     filterin_df=None
