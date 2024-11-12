@@ -245,14 +245,17 @@ def handle_csv_upload(purpose='filter out'):
     uploaded_file = st.file_uploader("Upload a CSV file", type="csv", key=purpose)
     if uploaded_file is not None:
         csv = pd.read_csv(uploaded_file)
+
         st.write("CSV file uploaded successfully. Here's a preview:")
         st.write(csv.head())
+        csv['address'] = csv['address'].str.lower()
 
         csv.set_index('address', inplace=True)
         if purpose == 'filter in':
             csv['scale'] = 1
         if purpose == 'filter out':
             csv['scale'] = 0
+        
         return csv
     return None
 
