@@ -256,8 +256,9 @@ def handle_csv_upload(purpose='filter out'):
     if uploaded_file is not None:
         csv = pd.read_csv(uploaded_file)
 
-        st.write("CSV file uploaded successfully. Here's a preview:")
-        st.write(csv.head())
+        st.subheader("✅ CSV file processed successfully and results updated below.")
+        st.write("Preview of uploaded data:")
+        st.dataframe(csv, height=200)
         csv['address'] = csv['address'].str.lower()
 
         csv.set_index('address', inplace=True)
