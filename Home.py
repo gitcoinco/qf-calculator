@@ -152,7 +152,7 @@ def load_data(round_id, chain_id):
     df = utils.get_round_votes(round_id, chain_id)
     
     # CUSTOM RULE: For round 608, change application_id 90 to 97
-    if round_id == '608':
+    if round_id == '608' and chain_id == 42161:
         affected_rows = len(df[df['application_id'] == '90'])
         if affected_rows > 0:
             df.loc[df['application_id'] == '90', ['application_id', 'project_id']] = ['97', '0x668333acfdfa16a6a9cac31af60d933bf92f70426a7e9ed6f7d7b8f1c2113b1b']
@@ -634,7 +634,7 @@ def prepare_output_dataframe(matching_df, strategy_choice, data):
     projects_df = projects_df[~projects_df['project_name'].isin(data['projects_to_remove'])]
     
     # CUSTOM RULE: Remove application ID 90 from round 608, duplicate project
-    if data['rounds']['round_id'].iloc[0] == '608':
+    if data['rounds']['round_id'].iloc[0] == '608' and data['chain_id'] == 42161:
         if '90' in projects_df['id'].values:
             projects_df = projects_df[projects_df['id'] != '90']
     
