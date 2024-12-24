@@ -3,9 +3,9 @@
 This application calculates and visualizes quadratic funding matching for Gitcoin rounds using both traditional QF and COCM approaches.
 
 ## Quick Links
-- [Architecture Overview](docs/architecture.md)
-- [Data Flow](docs/data-flow.md)
-- [Troubleshooting](docs/troubleshooting.md)
+- [Architecture Overview](architecture.md)
+- [Data Flow](data-flow.md)
+- [Troubleshooting](troubleshooting.md)
 
 ## Key Features
 - Quadratic Funding calculations
