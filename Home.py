@@ -577,8 +577,7 @@ def calculate_matching_results(data):
     
     matching_cap_amount = data['matching_cap']
     matching_amount = data['matching_available']
-    
-    
+
     # Calculate matching amounts using both COCM and QF strategies
     matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df_with_passport, matching_cap_amount, matching_amount, cluster_df=votes_df_with_passport, pct_cocm=data['pct_COCM']) 
                     for strategy in [data['strat'], 'QF']]
