@@ -391,7 +391,7 @@ def display_network_graph(df):
     fig = go.Figure(data=[edge_trace, node_trace],
                     layout=go.Layout(
                         title=' ',
-                        titlefont=dict(size=20),
+                        title_font=dict(size=20),
                         showlegend=False,
                         hovermode='closest',
                         margin=dict(b=20, l=5, r=5, t=40),
@@ -443,8 +443,8 @@ def calculate_verified_vs_unverified(scores, donations_df, score_threshold):
         title_text='Percentage of Crowdfunding and Users by Passport Status',
         title_font=dict(size=24),
         bargap=0.3,
-        xaxis=dict(title='Percentage', titlefont=dict(size=18), tickfont=dict(size=14)),
-        yaxis=dict(title='Category', titlefont=dict(size=18), tickfont=dict(size=14)),
+        xaxis=dict(title='Percentage', title_font=dict(size=18), tickfont=dict(size=14)),
+        yaxis=dict(title='Category', title_font=dict(size=18), tickfont=dict(size=14)),
         barmode='group',
         legend=dict(traceorder='reversed'),
         hoverlabel=dict(bgcolor="white", font_size=16, font_family="Rockwell")
