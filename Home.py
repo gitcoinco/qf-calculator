@@ -84,7 +84,7 @@ def validate_input():
 @st.cache_resource(ttl=36000)
 def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
     """Load scores and set Sybil defense parameters based on chain and defense type."""
-    if chain_id == 43114:  # AVALANCHE 
+    if chain_id == 43114 and sybilDefense != 'none':  # AVALANCHE 
         scores = utils.load_avax_scores(unique_voters)
         score_at_50_percent = score_at_100_percent = 25
         sybilDefense = 'Avalanche Passport'
