@@ -33,10 +33,10 @@ def run_query(query, params=None, database="grants"):
         conn.close()
     return results
 
-def load_data_from_url(url):
+def load_data_from_url(url, headers = None):
     """Load JSON data from a given URL and return as a list of dictionaries."""
     try:
-        response = requests.get(url, stream=True)
+        response = requests.get(url, headers=headers, stream=True)
         response.raise_for_status()  # Raise an error for bad responses
         lines = (line.decode('utf-8') for line in response.iter_lines())
         data = [json.loads(line) for line in lines if line]  # Ignore blank lines
@@ -114,18 +114,19 @@ def load_passport_model_scores(addresses):
 
 @st.cache_resource(ttl=ttl_long)
 def load_avax_scores(addresses):
+
     """Load and process Avalanche scores for given addresses."""
-    url = 'https://public.scorer.gitcoin.co/passport_scores/6608/registry_score.jsonl'
-    scores = load_data_from_url(url)
-    scores = pd.DataFrame(scores)
-    scores = scores.join(pd.json_normalize(scores['evidence'])).drop('evidence', axis=1)
-    scores = scores.join(pd.json_normalize(scores['passport'])).drop('passport', axis=1) 
-    scores['CivicUniquenessPass'] = scores['stamp_scores'].apply(lambda x: x.get('CivicUniquenessPass', 0))
-    scores['HolonymGovIdProvider'] = scores['stamp_scores'].apply(lambda x: x.get('HolonymGovIdProvider', 0))
+    query_results = [pd.DataFrame(load_data_from_url(f'https://api.passport.xyz/v2/stamps/335/score/{a}', headers = {'X-API-KEY': st.secrets['passport']['key']})) for a in addresses]
+    scores = pd.concat(query_results)
+
+    #scores = scores.join(pd.json_normalize(scores['evidence'])).drop('evidence', axis=1)
+    #scores = scores.join(pd.json_normalize(scores['passport'])).drop('passport', axis=1) 
+    #scores['CivicUniquenessPass'] = scores['stamp_scores'].apply(lambda x: x.get('CivicUniquenessPass', 0))
+    #scores['HolonymGovIdProvider'] = scores['stamp_scores'].apply(lambda x: x.get('HolonymGovIdProvider', 0))
     scores = scores[scores['address'].isin(addresses)]
     scores = scores.sort_values('last_score_timestamp', ascending=False).drop_duplicates('address')
     scores['score'] = scores['score'].astype(float)
-    scores['rawScore'] = scores['rawScore'].astype(float)
+    scores['rawScore'] = scores['score'].astype(float)
     return scores
 
 @st.cache_resource(ttl=ttl_long)
