@@ -245,8 +245,8 @@ def create_donation_distribution_chart(grouped_voter_data):
     fig.update_traces(hovertemplate='<b>Donation Range:</b> $%{x}<br><b>Number of Donors:</b> %{y}')
     fig.update_layout(
         title_text='Distribution of Donor Contributions by Amount',
-        xaxis=dict(title='Donation Amount Range (USD)', titlefont=dict(size=18), tickfont=dict(size=14)),
-        yaxis=dict(title='Number of Donors', titlefont=dict(size=18), tickfont=dict(size=14)),
+        xaxis=dict(title='Donation Amount Range (USD)', title_font=dict(size=18), tickfont=dict(size=14)),
+        yaxis=dict(title='Number of Donors', title_font=dict(size=18), tickfont=dict(size=14)),
         bargap=0.3
     )
     return fig
