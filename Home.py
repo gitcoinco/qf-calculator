@@ -151,6 +151,13 @@ def load_data(round_id, chain_id):
     sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else 'None'
     df = utils.get_round_votes(round_id, chain_id)
     
+    # CUSTOM RULE: For round 608, change application_id 90 to 97
+    if round_id == '608' and chain_id == 42161:
+        affected_rows = len(df[df['application_id'] == '90'])
+        if affected_rows > 0:
+            df.loc[df['application_id'] == '90', ['application_id', 'project_id']] = ['97', '0x668333acfdfa16a6a9cac31af60d933bf92f70426a7e9ed6f7d7b8f1c2113b1b']
+            st.warning(f"Due to a duplicate project entry, {affected_rows} votes for Application ID 90 have been remapped to Application ID 97 in round 608")    
+    
     # Fetch token configuration and price
     config_df = utils.fetch_tokens_config()
     config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
@@ -255,14 +262,18 @@ def handle_csv_upload(purpose='filter out'):
     uploaded_file = st.file_uploader("Upload a CSV file", type="csv", key=purpose)
     if uploaded_file is not None:
         csv = pd.read_csv(uploaded_file)
-        st.write("CSV file uploaded successfully. Here's a preview:")
-        st.write(csv.head())
+
+        st.subheader("✅ CSV file processed successfully and results updated below.")
+        st.write("Preview of uploaded data:")
+        st.dataframe(csv, height=200)
+        csv['address'] = csv['address'].str.lower()
 
         csv.set_index('address', inplace=True)
         if purpose == 'filter in':
             csv['scale'] = 1
         if purpose == 'filter out':
             csv['scale'] = 0
+        
         return csv
     return None
 
@@ -566,10 +577,8 @@ def calculate_matching_results(data):
     
     matching_cap_amount = data['matching_cap']
     matching_amount = data['matching_available']
-    
-    
+
     # Calculate matching amounts using both COCM and QF strategies
-    
     matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df_with_passport, matching_cap_amount, matching_amount, cluster_df=votes_df_with_passport, pct_cocm=data['pct_COCM']) 
                     for strategy in [data['strat'], 'QF']]
 
@@ -622,6 +631,11 @@ def prepare_output_dataframe(matching_df, strategy_choice, data):
     # Fetch and merge project details
     projects_df = utils.get_projects_in_round(data['rounds']['round_id'].iloc[0], data['chain_id'])
     projects_df = projects_df[~projects_df['project_name'].isin(data['projects_to_remove'])]
+    
+    # CUSTOM RULE: Remove application ID 90 from round 608, duplicate project
+    if data['rounds']['round_id'].iloc[0] == '608' and data['chain_id'] == 42161:
+        if '90' in projects_df['id'].values:
+            projects_df = projects_df[projects_df['id'] != '90']
     
     output_df = pd.merge(output_df, projects_df, left_on='project_name', right_on='project_name', how='outer')
     output_df = output_df.rename(columns={

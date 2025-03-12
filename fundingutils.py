@@ -331,11 +331,9 @@ def apply_voting_eligibility(votes_data, min_donation_threshold, score_at_50_per
     votes_data.loc[votes_data['rawScore'] > score_at_100_percent, 'amountUSD'] = votes_data['starting_amountUSD']
     # If the score is not a base vote , set the scaling factor to 0
     votes_data.loc[votes_data['base_vote'] == 0, 'amountUSD'] = 0
-
     if type(scaling_df) == pd.DataFrame:
       # reset scaling factors as determined by manual user input
       votes_data['amountUSD'] = votes_data.apply(lambda row: row['starting_amountUSD'] * scaling_df.loc[row['voter'],'scale'] if row['voter'] in scaling_df.index else row['amountUSD'], axis=1)
-
     return votes_data
 
 
