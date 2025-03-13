@@ -116,13 +116,14 @@ def load_passport_model_scores(addresses):
 def load_avax_scores(addresses):
 
     """Load and process Avalanche scores for given addresses."""
-    query_results = [pd.DataFrame(load_data_from_url(f'https://api.passport.xyz/v2/stamps/335/score/{a}', headers = {'X-API-KEY': st.secrets['passport']['key']})) for a in addresses]
-    scores = pd.concat(query_results)
+
+    scores = pd.concat([pd.DataFrame(load_data_from_url(f'https://api.passport.xyz/v2/stamps/335/score/{a}', headers = {'X-API-KEY': st.secrets['passport']['key']})) for a in addresses])
 
     #scores = scores.join(pd.json_normalize(scores['evidence'])).drop('evidence', axis=1)
     #scores = scores.join(pd.json_normalize(scores['passport'])).drop('passport', axis=1) 
     #scores['CivicUniquenessPass'] = scores['stamp_scores'].apply(lambda x: x.get('CivicUniquenessPass', 0))
     #scores['HolonymGovIdProvider'] = scores['stamp_scores'].apply(lambda x: x.get('HolonymGovIdProvider', 0))
+
     scores = scores[scores['address'].isin(addresses)]
     scores = scores.sort_values('last_score_timestamp', ascending=False).drop_duplicates('address')
     scores['score'] = scores['score'].astype(float)

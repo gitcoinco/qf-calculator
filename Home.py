@@ -613,6 +613,26 @@ def display_matching_results(matching_df, matching_token_symbol, s):
         hide_index=True
     )
     
+    # sorted_QF_amt = list(matching_df['matching_amount_QF']).sorted()
+    # sorted_COCM_amt = list(matching_df[f'matching_amount_{s}']).sorted()
+
+    qf_df = matching_df.copy()
+    qf_df['Strategy'] = 'QF'
+    qf_df['Amount'] = qf_df['matching_amount_QF']
+
+    co_df = matching_df.copy()
+    co_df['Strategy'] = s
+    co_df['Amount'] = co_df[f'matching_amount_{s}']    
+
+    plotly_df = pd.concat([qf_df, co_df])
+
+    fig = px.histogram(plotly_df, x='project_name', y='Amount', color='Strategy', barmode='group')
+    fig.update_layout(
+        xaxis_title="Project Name",
+        yaxis_title="Amount",
+    )
+    st.plotly_chart(fig)
+
     st.markdown(f'Matching Values shown above are in **{matching_token_symbol}**')
 
 def select_matching_strategy(s):
