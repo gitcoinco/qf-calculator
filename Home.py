@@ -573,13 +573,15 @@ def calculate_matching_results(data):
         data['score_at_100_percent'],
         data['scaling_df']
     )
-    votes_df_with_passport = fundingutils.pivot_votes(df_with_passport)
+    donation_matrix = fundingutils.pivot_votes(df_with_passport)
     
+    #donation_matrix.to_csv('name me'.csv')
+
     matching_cap_amount = data['matching_cap']
     matching_amount = data['matching_available']
 
     # Calculate matching amounts using both COCM and QF strategies
-    matching_dfs = [fundingutils.get_qf_matching(strategy, votes_df_with_passport, matching_cap_amount, matching_amount, cluster_df=votes_df_with_passport, pct_cocm=data['pct_COCM']) 
+    matching_dfs = [fundingutils.get_qf_matching(strategy, donation_matrix, matching_cap_amount, matching_amount, cluster_df=donation_matrix, pct_cocm=data['pct_COCM']) 
                     for strategy in [data['strat'], 'QF']]
 
 
@@ -592,7 +594,7 @@ def calculate_matching_results(data):
     matching_df['Project Page'] = 'https://explorer.gitcoin.co/#/round/' + matching_df['chain_id'].astype(str) + '/' + matching_df['round_id'].astype(str) + '/' + matching_df['application_id'].astype(str)
     matching_df['Δ Match'] = matching_df[f'matching_amount_{data["suffix"]}'] - matching_df['matching_amount_QF']
     
-    return matching_df.sort_values(f'matching_amount_{data["suffix"]}', ascending=False)
+    return matching_df.sort_values(f'matching_amount_{data["suffix"]}', ascending=False), donation_matrix
 
 def display_matching_results(matching_df, matching_token_symbol, s):
     """Display the matching results in a formatted table."""
@@ -634,6 +636,29 @@ def display_matching_results(matching_df, matching_token_symbol, s):
     st.plotly_chart(fig)
 
     st.markdown(f'Matching Values shown above are in **{matching_token_symbol}**')
+
+
+def display_singledonor_and_alldonor_stats(donation_matrix):
+    with st.expander('Advanced: Stats on single donors and all-project donors'):
+        st.write('''
+            As a by-product of COCM\'s logic, the algorithm ignores donors who donate to only one project, 
+            and donors who donate to every project. If projects are recieving less money than seems right under COCM, 
+            the following stats on single and all-project donors may help.\n\n
+            ''')
+        single_and_all_df = pd.DataFrame(index = donation_matrix.columns, columns = ['# Donors passing Passport and low-donation checks', '# single-project donors', '# all-project donors'])
+        single_and_all_df['# Donors passing Passport and low-donation checks'] = donation_matrix.apply(lambda p: sum(p.ne(0)))
+
+        count_single_donors = lambda p : sum(donation_matrix.loc[i].ne(0)[p] and (sum(donation_matrix.loc[i].ne(0)) == 1) for i in donation_matrix.index)
+        single_and_all_df['# single-project donors'] = donation_matrix.apply(lambda c: count_single_donors(c.name))
+
+        single_and_all_df['# all-project donors'] = sum(donation_matrix.apply(all, axis=1))
+
+        st.dataframe(
+            single_and_all_df,
+            use_container_width=True,
+            hide_index=False
+        )
+
 
 def select_matching_strategy(s):
     """Allow user to select the matching strategy for download."""
@@ -887,8 +912,9 @@ def main():
     data['df'] = data['df'][~data['df']['project_name'].isin(data['projects_to_remove'])]
     
     # Calculate and display matching results
-    matching_df = calculate_matching_results(data)
+    matching_df, donation_matrix = calculate_matching_results(data)
     display_matching_results(matching_df, data['config_df']['token_code'].iloc[0], data['suffix'])
+    display_singledonor_and_alldonor_stats(donation_matrix)
     display_network_graph(data['df'])
 
 
