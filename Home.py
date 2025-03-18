@@ -882,12 +882,15 @@ def main():
         data['suffix'] = (str(pct)+'0')[2:4]+'pctCOCM'
         data['pct_COCM'] = pct
 
-    matching_pool_size_override = None
-    with st.expander('Advanced: Change Matching Pool Size'):
-        matching_pool_size_override = st.number_input(f"New matching pool size (in {data['config_df']['token_code'].iloc[0]}): ", value=float(data['matching_available']), min_value=1.0)
-    if matching_pool_size_override is not None:
-        data['matching_available'] = matching_pool_size_override
-    # Display various settings of the round
+
+    # matching_pool_size_override = None
+    # with st.expander('Advanced: Change Matching Pool Size'):
+    #     matching_pool_size_override = st.number_input(f"New matching pool size (in {data['config_df']['token_code'].iloc[0]}): ", value=float(data['matching_available']), min_value=1.0)
+    # if matching_pool_size_override is not None:
+    #     data['matching_available'] = matching_pool_size_override
+    # # Display various settings of the round
+
+    
     display_round_settings(data)
 
 
