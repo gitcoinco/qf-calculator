@@ -1,5 +1,7 @@
 from queries.graphql.round_summary import get_round_summary_graphql
 from queries.graphql.recent_rounds import get_recent_rounds_graphql
+from queries.graphql.project_summary import get_project_summary_graphql
+from queries.graphql.votes_by_round import get_votes_by_round_graphql
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -10,7 +12,6 @@ import utils
 import fundingutils
 from decimal import Decimal, getcontext
 import decimal
-from queries.graphql.project_summary import get_project_summary_graphql
 
 
 # Page configuration
@@ -127,7 +128,10 @@ def load_data(round_id, chain_id):
     
     token = rounds['token'].values[0] if 'token' in rounds else 'ETH'    
     sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else 'None'
-    df = utils.get_round_votes(round_id, chain_id)
+    df = get_votes_by_round_graphql(chain_id, round_id)
+
+    with open("votes.txt", "w") as f:
+        f.write(df.to_string())
         
     # Fetch token configuration and price
     config_df = utils.fetch_tokens_config()
@@ -658,11 +662,10 @@ def prepare_output_dataframe(matching_df, strategy_choice, data):
         'total_donations_count': 'contributionsCount',
         'total_amount_donated_in_usd': 'totalReceived'
     })
-    
     # Convert matching amounts to USD and adjust for token decimals
     matching_token_decimals = data['config_df']['token_decimals'].iloc[0]
     output_df['matchedUSD'] = (output_df['matched'] * data['matching_token_price']).round(2)
-    
+   
     output_df['matched'] = (output_df['matched'] * 10**matching_token_decimals).apply(lambda x: int(x))
     output_df['totalReceived'] = (output_df['totalReceived'] * 10**matching_token_decimals).apply(lambda x: int(x))
     

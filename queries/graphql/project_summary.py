@@ -39,6 +39,7 @@ def get_project_summary_graphql(chain_id, round_id, limit=200, offset=0):
             },
             limit: $limit,
             offset: $offset
+            orderBy: {timestamp: DESC}
         ) {
             id
             chainId

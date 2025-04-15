@@ -47,19 +47,6 @@ def load_data_from_url(url, headers = None):
         st.warning(f"Failed to parse JSON data from {url}. Error: {e}")
         return []
 
-@st.cache_resource(ttl=ttl_short)
-def get_round_votes(round_id, chain_id):
-    """Fetch and return votes for a specific round and chain."""
-    sql_query_file = 'queries/get_votes_by_round_id_from_indexer.sql'
-    with open(sql_query_file, 'r') as file:
-        query = file.read()
-    params = {
-        'round_id': round_id,
-        'chain_id': chain_id
-    }
-    results = run_query(query, params)
-    return results
-
 @st.cache_resource(ttl=ttl_long) 
 def load_passport_model_scores(addresses):
     """Load and process passport model scores for given addresses."""
