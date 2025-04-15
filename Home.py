@@ -1,3 +1,5 @@
+from queries.graphql.round_summary import get_round_summary_graphql
+from queries.graphql.recent_rounds import get_recent_rounds_graphql
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -30,15 +32,19 @@ if len(query_params_chain_id) == 1 and not st.session_state.chain_id:
 
 def display_recent_rounds():
     # Fetch and process round data
-    rounds = utils.get_round_summary()
-    current_time = pd.Timestamp.now(tz='UTC')
-    rounds = rounds[(rounds['donations_end_time'].dt.tz_convert('UTC') < current_time) & (rounds['votes'] > 0)]
-    rounds = rounds.sort_values('donations_end_time', ascending=False)
+    rounds = get_recent_rounds_graphql(limit=100)
 
     # Create round links and prepare display data
     rounds['Round Link'] = rounds.apply(lambda row: f"https://qf-calculator.fly.dev/?round_id={row['round_id']}&chain_id={row['chain_id']}", axis=1)
-    rounds_display = rounds[['round_name', 'Round Link', 'votes', 'uniqueContributors', 'amountUSD']]
-    
+    rounds_display = rounds[[
+        'round_name', 
+        'chain_id',
+        'round_id',
+        'Round Link',
+        'votes',
+        'uniqueContributors',
+        'amountUSD'
+    ]]
     # Configure column display
     column_config = {
         "Round Link": st.column_config.LinkColumn(
@@ -62,9 +68,8 @@ def display_recent_rounds():
     }
 
     # Display the dataframe
-    st.header("Recent Rounds That Have Ended:")
+    st.header("Recent Rounds That Have Ended With More than 10 Unique Contributors:")
     st.dataframe(
-        #rounds_display.head(20),
         rounds_display,
         column_config=column_config,
         hide_index=True
@@ -104,7 +109,7 @@ def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
     return scores, score_at_50_percent, score_at_100_percent, sybilDefense
 
 def check_round_existence(round_id, chain_id):
-    rounds = utils.get_round_summary()
+    rounds = get_round_summary_graphql(chain_id, round_id)  # Fetch up to 100 recent rounds
     rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)] # FILTER BY ROUND_ID AND CHAIN_ID
     if len(rounds) == 0:
         st.write('## We could not find your round in our data.')
@@ -117,60 +122,21 @@ def load_data(round_id, chain_id):
     blockchain_mapping = {1: "Ethereum", 10: "Optimism", 137: "Polygon", 250: "Fantom",
                           324: "ZKSync", 8453: "Base", 42161: "Arbitrum", 43114: "Avalanche",
                           534352: "Scroll", 1329: "SEI", 42220: "Celo", 1088: "Metis", 42: "Lukso" }
-    rounds = utils.get_round_summary()
+    rounds = get_round_summary_graphql(chain_id, round_id)
     
-    # """
-    # TESTING
-    # """
-    # rt = rounds[rounds['sybilDefense'] == 'passport-mbds']
-    # st.write(rt[rt['uniqueContributors'] > 0].head(20))
-
-    rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)] # FILTER BY ROUND_ID AND CHAIN_ID
-    if round_id == '11' and chain_id == 1329:
-        rounds = pd.DataFrame()
-        round_data = {
-            'round_name': ['Sei Creator Fund Round #3 - Developer Ecosystem'],
-            'amountUSD': [41352.29],
-            'votes': [7428],
-            'uniqueContributors': [2755],
-            'chain_id': [1329],
-            'round_id': ['11'],
-            'donations_end_time': ['October 17, 2024, 4:00 PM'],
-            'donations_start_time': ['October 3, 2024, 4:00 PM'],
-            'has_matching_cap': [True],
-            'matching_cap_amount': [10],
-            'matching_funds_available': [833333],
-            'token': ['0x0000000000000000000000000000000000000000'],
-            'has_min_donation_threshold': [False],
-            'min_donation_threshold_amount': [0.0],
-            'sybilDefense': ['none']
-        }
-        rounds = pd.concat([rounds, pd.DataFrame(round_data)], ignore_index=True)
-    
-    token = rounds['token'].values[0] if 'token' in rounds else 'ETH'
+    token = rounds['token'].values[0] if 'token' in rounds else 'ETH'    
     sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else 'None'
     df = utils.get_round_votes(round_id, chain_id)
-    
-    # CUSTOM RULE: For round 608, change application_id 90 to 97
-    if round_id == '608' and chain_id == 42161:
-        affected_rows = len(df[df['application_id'] == '90'])
-        if affected_rows > 0:
-            df.loc[df['application_id'] == '90', ['application_id', 'project_id']] = ['97', '0x668333acfdfa16a6a9cac31af60d933bf92f70426a7e9ed6f7d7b8f1c2113b1b']
-            st.warning(f"Due to a duplicate project entry, {affected_rows} votes for Application ID 90 have been remapped to Application ID 97 in round 608")    
-    
+        
     # Fetch token configuration and price
     config_df = utils.fetch_tokens_config()
-    config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token)]
+    config_df = config_df[(config_df['chain_id'] == chain_id) & (config_df['token_address'] == token.lower())]
     matching_token_price = utils.fetch_latest_price(config_df['price_source_chain_id'].iloc[0], config_df['price_source_address'].iloc[0])
-    
     unique_voters = df['voter'].unique()
-
     scores, score_at_50_percent, score_at_100_percent, sybilDefense = load_scores_and_set_defense(chain_id, sybilDefense, unique_voters)
-
     # Merge scores with the main dataframe
     df = pd.merge(df, scores[['address', 'rawScore']], left_on='voter', right_on='address', how='left')
     df['rawScore'] = df['rawScore'].fillna(0)  # Fill NaN values with 0 for voters without a score
-    
 
     return {
         "blockchain_mapping": blockchain_mapping,
