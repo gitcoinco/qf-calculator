@@ -60,19 +60,6 @@ def get_round_votes(round_id, chain_id):
     results = run_query(query, params)
     return results
 
-@st.cache_resource(ttl=ttl_short)
-def get_projects_in_round(round_id, chain_id):
-    """Fetch and return projects for a specific round and chain."""
-    sql_query_file = 'queries/get_projects_summary_from_indexer.sql'
-    with open(sql_query_file, 'r') as file:
-        query = file.read()
-    params = {
-        'round_id': round_id,
-        'chain_id': chain_id
-    }
-    results = run_query(query, params)
-    return results
-
 @st.cache_resource(ttl=ttl_long) 
 def load_passport_model_scores(addresses):
     """Load and process passport model scores for given addresses."""

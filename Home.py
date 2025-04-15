@@ -10,6 +10,7 @@ import utils
 import fundingutils
 from decimal import Decimal, getcontext
 import decimal
+from queries.graphql.project_summary import get_project_summary_graphql
 
 
 # Page configuration
@@ -639,8 +640,8 @@ def prepare_output_dataframe(matching_df, strategy_choice, data):
     output_df = matching_df[['project_name', f'matching_amount_{strategy_choice}']]
     output_df = output_df.rename(columns={f'matching_amount_{strategy_choice}': 'matched'})
     
-    # Fetch and merge project details
-    projects_df = utils.get_projects_in_round(data['rounds']['round_id'].iloc[0], data['chain_id'])
+    # Get projects in the round
+    projects_df = get_project_summary_graphql(data['chain_id'], data['rounds']['round_id'].iloc[0])
     projects_df = projects_df[~projects_df['project_name'].isin(data['projects_to_remove'])]
     
     # CUSTOM RULE: Remove application ID 90 from round 608, duplicate project
