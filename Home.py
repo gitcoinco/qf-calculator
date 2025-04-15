@@ -564,7 +564,7 @@ def display_passport_usage(data):
                 )
 
 def calculate_matching_results(data):
-    """Calculate matching results using different strategies (COCM and QF)."""
+    """Calculate matching results using different strategies (COCM, QF, and TQF)."""
     # Apply voting eligibility based on passport scores and donation thresholds
     df_with_passport = fundingutils.apply_voting_eligibility(
         data['df'].copy(), 
@@ -584,15 +584,37 @@ def calculate_matching_results(data):
     matching_dfs = [fundingutils.get_qf_matching(strategy, donation_matrix, matching_cap_amount, matching_amount, cluster_df=donation_matrix, pct_cocm=data['pct_COCM']) 
                     for strategy in [data['strat'], 'QF']]
 
+    matching_dfs.append(fundingutils.tunable_qf(
+        df_with_passport,
+        data['token_distribution_df'],
+        'TQF',
+        matching_cap_amount,
+        matching_amount,
+    ))
+
+    matching_dfs.append(fundingutils.tunable_qf(
+        df_with_passport,
+        data['token_distribution_df'],
+        data['strat'],
+        matching_cap_amount,
+        matching_amount,
+        cluster_df=donation_matrix, 
+        pct_cocm=data['pct_COCM']
+    ))
+
 
     # Merge results from both strategies
     matching_df = pd.merge(matching_dfs[0], matching_dfs[1], on='project_name', suffixes=(f'_{data["suffix"]}', '_QF'))
+    matching_df = pd.merge(matching_df, matching_dfs[2], on='project_name', suffixes=(None, '_TQF'))
+    matching_df = pd.merge(matching_df, matching_dfs[3], on='project_name', suffixes=(f'_TQF', '_TQF_COCM'))
     
     # Add project details and calculate the difference between COCM and QF matching
     df_unique = data['df'][['project_name', 'chain_id', 'round_id', 'application_id']].drop_duplicates()
     matching_df = pd.merge(matching_df, df_unique, on='project_name', how='left')
     matching_df['Project Page'] = 'https://explorer.gitcoin.co/#/round/' + matching_df['chain_id'].astype(str) + '/' + matching_df['round_id'].astype(str) + '/' + matching_df['application_id'].astype(str)
     matching_df['Δ Match'] = matching_df[f'matching_amount_{data["suffix"]}'] - matching_df['matching_amount_QF']
+    matching_df['Δ TQF'] = matching_df['matching_amount_TQF'] - matching_df['matching_amount_QF']
+    matching_df['Δ TQF_COCM'] = matching_df['matching_amount_TQF_COCM'] - matching_df['matching_amount_TQF']
     
     return matching_df.sort_values(f'matching_amount_{data["suffix"]}', ascending=False), donation_matrix
 
@@ -603,11 +625,15 @@ def display_matching_results(matching_df, matching_token_symbol, s):
         "project_name": st.column_config.TextColumn("Project"),
         f"matching_amount_{s}": st.column_config.NumberColumn(f"{s} Match", format="%.2f"),
         "matching_amount_QF": st.column_config.NumberColumn("QF Match", format="%.2f"),
+        "matching_amount_TQF": st.column_config.NumberColumn("TQF Match", format="%.2f"),
+        "matching_amount_TQF_COCM": st.column_config.NumberColumn("TQF_COCM Match", format="%.2f"),
         "Δ Match": st.column_config.NumberColumn("Δ Match", format="%.2f"),
+        "Δ TQF": st.column_config.NumberColumn("Δ TQF", format="%.2f"),
+        "Δ TQF_COCM": st.column_config.NumberColumn("Δ TQF_COCM", format="%.2f"),
         "Project Page": st.column_config.LinkColumn("Project Page", display_text="Visit")
     }
     
-    display_columns = ['project_name', f'matching_amount_{s}', 'matching_amount_QF', 'Δ Match', 'Project Page']
+    display_columns = ['project_name', f'matching_amount_{s}', 'matching_amount_QF', 'matching_amount_TQF', 'matching_amount_TQF_COCM', 'Δ Match', 'Δ TQF', 'Δ TQF_COCM', 'Project Page']
     st.dataframe(
         matching_df[display_columns],
         use_container_width=True,
@@ -661,10 +687,10 @@ def display_singledonor_and_alldonor_stats(donation_matrix):
 
 
 def select_matching_strategy(s):
-    """Allow user to select the matching strategy for download."""
+    """Allow user to select the matching strategy to download."""
     return st.selectbox(
         'Select the matching strategy to download:',
-        (f'{s}', 'QF')
+        (f'{s}', 'QF', 'TQF','TQF_COCM')
     )
 
 def prepare_output_dataframe(matching_df, strategy_choice, data):
@@ -823,6 +849,109 @@ def create_matching_distribution_chart(summary_df, token_symbol):
     )
     return fig
 
+def handle_token_distribution_upload(key_suffix=""):
+    """Handle upload of token distribution CSV with a boost multiplier."""
+    col1, col2, col3, col4 = st.columns([2,1,1,1])
+    
+    with col1:
+        uploaded_file = st.file_uploader(
+            "Token Distribution Data", 
+            type="csv", 
+            key=f"token_dist_{key_suffix}",
+            help="CSV with token distribution columns"
+        )
+    
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        with col2:
+            address_column = st.selectbox(
+                "Address Column",
+                options=df.columns,
+                key=f"address_column_{key_suffix}",
+                help="Column containing addresses"
+            )
+        with col3:
+            signal_column = st.selectbox(
+                "Token/Score Column",
+                options=[col for col in df.columns if col != address_column],
+                key=f"signal_column_{key_suffix}",
+                help="Column containing numeric signal values"
+            )
+        
+        with col4:
+            boost_multiplier = st.slider(
+                "Boost Multiplier",
+                min_value=0.1,
+                max_value=10.0,
+                value=2.0,
+                step=0.1,
+                format="%.1fx",
+                key=f"boost_multiplier_{key_suffix}"
+            )
+            
+            threshold = st.number_input(
+                "Threshold",
+                value=0.0,
+                step=0.1,
+                key=f"threshold_{key_suffix}",
+                help="Minimum value to consider"
+            )
+
+            # Add comparison constraints
+            constraint_type = st.selectbox(
+                "Constraint Type",
+                options=[">=", ">", "<=", "<"],
+                key=f"constraint_type_{key_suffix}",
+                help="Apply constraint to token values"
+            )
+        
+        try:
+            # Process the data
+            processed_df = df[[address_column, signal_column]].copy()
+            processed_df['scale_factor'] = processed_df[signal_column].apply(lambda x: boost_multiplier if eval(f"x {constraint_type} {threshold}") else 1)
+            
+            st.success("✅ Token distribution loaded successfully")
+            return processed_df[[address_column, 'scale_factor']], address_column
+            
+        except Exception as e:
+            st.error(f"Error processing CSV: {str(e)}")
+            return None
+    return None
+
+def combine_token_distributions(token_dfs):
+    """Combine multiple token distribution DataFrames."""
+    if not token_dfs:
+        return None
+        
+    # Combine all dataframes
+    combined_df = pd.DataFrame()
+    for token_df in token_dfs:
+        df = token_df[0]
+        address_column = token_df[1]
+        combined_df = pd.concat([combined_df, df])
+        combined_df = combined_df.groupby(address_column)['scale_factor'].sum().reset_index()
+    return combined_df
+
+def handle_token_distributions():
+    """Handle multiple token distributions with boosts."""
+    token_dfs = []
+    
+    # First distribution
+    df1 = handle_token_distribution_upload("1")
+    if df1 is not None:
+        token_dfs.append(df1)
+    
+    # Additional distributions
+    for i in range(st.session_state.num_additional_tokens):
+        df = handle_token_distribution_upload(f"additional_{i}")
+        if df is not None:
+            token_dfs.append(df)
+    
+    # Combine distributions
+    if token_dfs:
+        return combine_token_distributions(token_dfs)
+    return None
+
 def main():
     """Main function to run the Streamlit app."""
     st.image('assets/657c7ed16b14af693c08b92d_GTC-Logotype-Dark.png', width=200)
@@ -836,9 +965,9 @@ def main():
     filterout_df=None
     arbitrary_df=None
     scaling_df=None
+    tqf_boost_multiplier = 2.0  # Default value
+    
     with st.expander("Advanced: Override Passport Scaling"):
-
-        
         if st.toggle('Filter in wallets', value=False, key='filterin-toggle'):
             filterout_df = handle_csv_upload(purpose='filter in')
 
@@ -868,10 +997,80 @@ def main():
                     Pure QF results are always available separately.''')
         c1,c2,c3 = st.columns(3)
         pct = c1.slider('Percent COCM', min_value = 0.25, max_value=1.0, value=1.0, step=0.25)
-    
     # Load and process data
     data = load_data(round_id, chain_id)
     data['scaling_df'] = scaling_df
+
+    with st.expander("Advanced: Tunable Quadratic Funding"):
+        st.write("""
+        ### 🎯 What is Tunable Quadratic Funding (TQF)?
+        
+        TQF extends traditional Quadratic Funding by allowing votes to be weighted based on token holdings or other on-chain signals. This enables:
+        
+        - **Token-Weighted Voting**: Boost voting power based on token holdings
+        - **Multiple Signal Sources**: Combine multiple token distributions or signals
+        - **Flexible Constraints**: Set thresholds and conditions for vote scaling
+        - **Customizable Boosts**: Adjust multipliers for different token distributions
+        
+        ### 📊 How it Works:
+        1. Upload CSV with token distribution data
+        2. Select address and signal columns
+        3. Set boost multiplier and constraints
+        4. Votes will be scaled based on token holdings
+        
+        ### 📈 Signal Columns
+        Signal columns represent numerical values that determine vote scaling. Examples include:
+        - Token balances (e.g., governance tokens)
+        - Reputation scores
+        - Participation metrics
+        - Staking amounts
+        
+        **Requirements:**
+        - Must contain only numerical values (integers or decimals)
+        - Higher values typically indicate stronger signals
+        - Common formats: token amounts (1000.0), scores (0-100), weights (0.0-1.0)
+        
+        ### 🔧 Configuration Options:
+        - **Boost Multiplier**: Multiply voting power (0.1x to 10x)
+        - **Threshold**: Minimum signal value to apply boost
+        - **Constraints**: Apply conditions like >= or <= to signal values
+        
+        ### 📋 CSV Format Example:
+        ```
+        address,token_balance,reputation_score
+        0x123...,1000.0,85.5
+        0x456...,500.0,92.1
+        ```
+        """)
+        
+        token_dfs = []
+        
+        # First token distribution
+        st.subheader("Token Distribution #1")
+        df1 = handle_token_distribution_upload("1")
+        if df1 is not None:
+            token_dfs.append(df1)
+        # Initialize session state for tracking additional tokens
+        if 'num_additional_tokens' not in st.session_state:
+            st.session_state.num_additional_tokens = 0
+        
+        # Button to add new token distribution
+        if st.button("+ Add Another Token Distribution") and st.session_state.num_additional_tokens < 5:
+            st.session_state.num_additional_tokens += 1
+        
+        # Display additional token distributions
+        for i in range(st.session_state.num_additional_tokens):
+            token_num = i + 2  # Start from Token #2
+            st.subheader(f"Token Distribution #{token_num}")
+            df = handle_token_distribution_upload(f"additional_{i}")
+            if df is not None:
+                token_dfs.append(df)
+        
+        # Combine all token distributions
+        token_distribution_df = combine_token_distributions(token_dfs)
+        data['token_distribution_df'] = token_distribution_df
+
+    data['tqf_boost_multiplier'] = tqf_boost_multiplier
 
     if pct == 1:
         data['strat'] = 'COCM'
