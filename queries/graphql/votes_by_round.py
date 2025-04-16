@@ -76,7 +76,7 @@ def get_votes_by_round_graphql(chain_id, round_id, limit=200, offset=0):
             "offset": current_offset
         }
 
-        print(variables)
+        # print(variables)
         
         # Make the GraphQL request
         try:

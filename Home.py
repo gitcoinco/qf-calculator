@@ -111,7 +111,7 @@ def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
     return scores, score_at_50_percent, score_at_100_percent, sybilDefense
 
 def check_round_existence(round_id, chain_id):
-    rounds = get_round_summary_graphql(chain_id, round_id)  # Fetch up to 100 recent rounds
+    rounds = get_round_summary_graphql(chain_id, round_id)
     rounds = rounds[(rounds['round_id'].str.lower() == round_id) & (rounds['chain_id'] == chain_id)] # FILTER BY ROUND_ID AND CHAIN_ID
     if len(rounds) == 0:
         st.write('## We could not find your round in our data.')
@@ -154,8 +154,8 @@ def load_data(round_id, chain_id):
         "score_at_100_percent": score_at_100_percent,
         "sybilDefense": sybilDefense,
         "chain_id": chain_id,
-        "matching_cap": rounds['matching_cap_amount'].values[0].astype(float),
-        "matching_available": rounds['matching_funds_available'].values[0].astype(float),
+        "matching_cap": float(rounds['matching_cap_amount'].values[0]) if rounds['matching_cap_amount'].values[0] is not None else 0.0,
+        "matching_available": float(rounds['matching_funds_available'].values[0]) if rounds['matching_funds_available'].values[0] is not None else 0.0,
 
     }
 
@@ -168,6 +168,7 @@ def display_round_settings(data):
     col1.write(f"**Matching Cap:** {data['matching_cap']:.2f}%")
     col1.write(f"**Passport Defense Selected:** {data['sybilDefense']}")
     col1.write(f"**Number of Unique Voters:** {data['df']['voter'].nunique()}")
+    col1.write(f"**Total Donations Count:** {data['df']['voter'].count()}")
     col2.write(f"**Matching Available:** {data['matching_available']:.2f} {data['config_df']['token_code'].iloc[0]}")
     col2.write(f"**Matching Token Price:** ${data['matching_token_price']:.2f}")
     col2.write(f"**Minimum Donation Threshold Amount:** ${data['rounds'].get('min_donation_threshold_amount', 0).values[0]:.2f}")
