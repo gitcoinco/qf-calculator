@@ -130,8 +130,8 @@ def load_data(round_id, chain_id):
     sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else 'None'
     df = get_votes_by_round_graphql(chain_id, round_id)
 
-    with open("votes.txt", "w") as f:
-        f.write(df.to_string())
+    # with open("votes.txt", "w") as f:
+    #     f.write(df.to_string())
         
     # Fetch token configuration and price
     config_df = utils.fetch_tokens_config()
@@ -590,7 +590,7 @@ def calculate_matching_results(data):
     
     return matching_df.sort_values(f'matching_amount_{data["suffix"]}', ascending=False), donation_matrix
 
-def display_matching_results(matching_df, matching_token_symbol, s):
+def display_matching_results(matching_df, matching_token_symbol, s, using_TQF):
     """Display the matching results in a formatted table."""
     st.subheader('Matching Results')
     column_config = {
@@ -604,8 +604,11 @@ def display_matching_results(matching_df, matching_token_symbol, s):
         "Δ TQF_COCM": st.column_config.NumberColumn("Δ TQF_COCM", format="%.2f"),
         "Project Page": st.column_config.LinkColumn("Project Page", display_text="Visit")
     }
-    
-    display_columns = ['project_name', f'matching_amount_{s}', 'matching_amount_QF', 'matching_amount_TQF', 'matching_amount_TQF_COCM', 'Δ Match', 'Δ TQF', 'Δ TQF_COCM', 'Project Page']
+    if using_TQF:
+        display_columns = ['project_name', f'matching_amount_{s}', 'matching_amount_QF', 'matching_amount_TQF', 'matching_amount_TQF_COCM', 'Δ Match', 'Δ TQF', 'Δ TQF_COCM', 'Project Page']
+    else:
+        display_columns = ['project_name', f'matching_amount_{s}', 'matching_amount_QF', 'Δ Match', 'Project Page']
+
     st.dataframe(
         matching_df[display_columns],
         use_container_width=True,
@@ -658,12 +661,18 @@ def display_singledonor_and_alldonor_stats(donation_matrix):
         )
 
 
-def select_matching_strategy(s):
+def select_matching_strategy(s, using_TQF):
     """Allow user to select the matching strategy to download."""
-    return st.selectbox(
-        'Select the matching strategy to download:',
-        (f'{s}', 'QF', 'TQF','TQF_COCM')
-    )
+    if using_TQF:
+        return st.selectbox(
+            'Select the matching strategy to download:',
+            (f'{s}', 'QF', 'TQF','TQF_COCM')
+        )
+    else:
+        return st.selectbox(
+            'Select the matching strategy to download:',
+            (f'{s}', 'QF')
+        )
 
 def prepare_output_dataframe(matching_df, strategy_choice, data):
     """Prepare the output dataframe for download based on the selected strategy."""
@@ -903,25 +912,25 @@ def combine_token_distributions(token_dfs):
         combined_df = combined_df.groupby(address_column)['scale_factor'].sum().reset_index()
     return combined_df
 
-def handle_token_distributions():
-    """Handle multiple token distributions with boosts."""
-    token_dfs = []
+# def handle_token_distributions():
+#     """Handle multiple token distributions with boosts."""
+#     token_dfs = []
     
-    # First distribution
-    df1 = handle_token_distribution_upload("1")
-    if df1 is not None:
-        token_dfs.append(df1)
+#     # First distribution
+#     df1 = handle_token_distribution_upload("1")
+#     if df1 is not None:
+#         token_dfs.append(df1)
     
-    # Additional distributions
-    for i in range(st.session_state.num_additional_tokens):
-        df = handle_token_distribution_upload(f"additional_{i}")
-        if df is not None:
-            token_dfs.append(df)
+#     # Additional distributions
+#     for i in range(st.session_state.num_additional_tokens):
+#         df = handle_token_distribution_upload(f"additional_{i}")
+#         if df is not None:
+#             token_dfs.append(df)
     
-    # Combine distributions
-    if token_dfs:
-        return combine_token_distributions(token_dfs)
-    return None
+#     # Combine distributions
+#     if token_dfs:
+#         return combine_token_distributions(token_dfs)
+#     return None
 
 def main():
     """Main function to run the Streamlit app."""
@@ -972,6 +981,7 @@ def main():
     data = load_data(round_id, chain_id)
     data['scaling_df'] = scaling_df
 
+    data['using TQF'] = False
     with st.expander("Advanced: Tunable Quadratic Funding"):
         st.write("""
         ### 🎯 What is Tunable Quadratic Funding (TQF)?
@@ -1040,6 +1050,8 @@ def main():
         # Combine all token distributions
         token_distribution_df = combine_token_distributions(token_dfs)
         data['token_distribution_df'] = token_distribution_df
+        if data['token_distribution_df'] is not None:
+            data['using TQF'] = True
 
     data['tqf_boost_multiplier'] = tqf_boost_multiplier
 
@@ -1086,7 +1098,7 @@ def main():
     
     # Calculate and display matching results
     matching_df, donation_matrix = calculate_matching_results(data)
-    display_matching_results(matching_df, data['config_df']['token_code'].iloc[0], data['suffix'])
+    display_matching_results(matching_df, data['config_df']['token_code'].iloc[0], data['suffix'], data['using TQF'])
     display_singledonor_and_alldonor_stats(donation_matrix)
     display_network_graph(data['df'])
 
@@ -1095,7 +1107,7 @@ def main():
     st.subheader('Download Matching Distribution')
     if calculate_percent_scored_voters(data) < 99:
         st.warning('Matching distribution download is not recommended until more addresses are scored. This could take 24-72 hours after the round concludes.')
-    strategy_choice = select_matching_strategy(data['suffix'])
+    strategy_choice = select_matching_strategy(data['suffix'], data['using TQF'])
     output_df = prepare_output_dataframe(matching_df, strategy_choice, data)
     output_df = adjust_matching_overflow(output_df, data['matching_available'], data['config_df']['token_decimals'].iloc[0])
     display_matching_distribution(output_df)
