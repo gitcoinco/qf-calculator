@@ -6,3 +6,5 @@ data/passport_scores_june24.csv
 codebase.md
 .aidigestignore
 data/checking_passport.ipynb
+.DS_Store
+.vscode
