@@ -394,13 +394,11 @@ def tunable_qf(donation_df, token_distribution_df,algo, matching_cap_percent, ma
     Calculate quadratic funding with optional boost factors for donors.
     
     Args:
-        donation_df: DataFrame with voter donations
+        donation_df: matrix of voter donations
         token_distribution_df: DataFrame with [address, scale_factor] columns
         matching_cap_percent: Maximum percentage for matching
         matching_amount: Total matching pool size
     """
-    # Create votes matrix
-    votes_df = pivot_votes(donation_df)
     
     # Apply scale factors if provided
     if token_distribution_df is not None:
@@ -410,11 +408,20 @@ def tunable_qf(donation_df, token_distribution_df,algo, matching_cap_percent, ma
         token_distribution_df.index = token_distribution_df.index.str.lower()
 
         # Apply scale factors to each voter's donations
-        for voter in votes_df.index:
+        for voter in donation_df.index:
             voter_lower = voter.lower()
             if voter_lower in token_distribution_df.index:
                 scale = token_distribution_df.loc[voter_lower, 'scale_factor']
-                votes_df.loc[voter] *= scale
+                donation_df.loc[voter] *= scale
     
     # Calculate QF with scaled votes
-    return get_qf_matching(algo, votes_df, matching_cap_percent, matching_amount, cluster_df, pct_cocm)
+    return get_qf_matching(algo, donation_df, matching_cap_percent, matching_amount, cluster_df, pct_cocm)
+
+
+def gini(l, on_gt_0 = True):
+  if on_gt_0:
+    l2 = [x for x in l if x > 0]
+    l = l2
+  num = sum(abs(i - j) for i in l for j in l)
+  denom = 2 * len(l) * sum(l)
+  return num / denom

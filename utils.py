@@ -173,7 +173,7 @@ def fetch_tokens_config():
         response = requests.get(url)
         response.raise_for_status()  # Raise an error for bad responses
     except requests.RequestException as e:
-        print(f"Failed to fetch data from {url}. Error: {e}")
+        st.write(f"Failed to fetch data from {url}. Error: {e}")
         return None
 
     df = parse_config_file(response.text)

@@ -535,8 +535,8 @@ def display_passport_usage(data):
                     hide_index=True
                 )
 
-def calculate_matching_results(data):
-    """Calculate matching results using different strategies (COCM, QF, and TQF)."""
+
+def get_donation_matrix(data):
     # Apply voting eligibility based on passport scores and donation thresholds
     df_with_passport = fundingutils.apply_voting_eligibility(
         data['df'].copy(), 
@@ -546,6 +546,12 @@ def calculate_matching_results(data):
         data['scaling_df']
     )
     donation_matrix = fundingutils.pivot_votes(df_with_passport)
+    return  donation_matrix
+
+def calculate_matching_results(data):
+    """Calculate matching results using different strategies (COCM, QF, and TQF)."""
+    
+    donation_matrix = data['donation_matrix']
     
     #donation_matrix.to_csv('name me'.csv')
 
@@ -557,7 +563,7 @@ def calculate_matching_results(data):
                     for strategy in [data['strat'], 'QF']]
 
     matching_dfs.append(fundingutils.tunable_qf(
-        df_with_passport,
+        donation_matrix,
         data['token_distribution_df'],
         'TQF',
         matching_cap_amount,
@@ -565,7 +571,7 @@ def calculate_matching_results(data):
     ))
 
     matching_dfs.append(fundingutils.tunable_qf(
-        df_with_passport,
+        donation_matrix,
         data['token_distribution_df'],
         data['strat'],
         matching_cap_amount,
@@ -588,7 +594,7 @@ def calculate_matching_results(data):
     matching_df['Δ TQF'] = matching_df['matching_amount_TQF'] - matching_df['matching_amount_QF']
     matching_df['Δ TQF_COCM'] = matching_df['matching_amount_TQF_COCM'] - matching_df['matching_amount_TQF']
     
-    return matching_df.sort_values(f'matching_amount_{data["suffix"]}', ascending=False), donation_matrix
+    return matching_df.sort_values(f'matching_amount_{data["suffix"]}', ascending=False)
 
 def display_matching_results(matching_df, matching_token_symbol, s, using_TQF):
     """Display the matching results in a formatted table."""
@@ -1086,6 +1092,31 @@ def main():
     # Passport usage section (ONLY APPEARS IF SYBIL DEFENSE IS ENABLED)
     display_passport_usage(data)
 
+
+
+    ### get donation matrix (post passport)
+    donation_matrix = get_donation_matrix(data)
+
+    data['donation_matrix'] = donation_matrix
+
+    g_idx = {w: fundingutils.gini(list(donation_matrix.loc[w])) for w in donation_matrix.index if sum(donation_matrix.loc[w]) > 0}
+    passing_donors = g_idx.keys()
+    num_passing_donors = len(passing_donors)
+
+    st.header('👥 Donation Inequality')
+    st.write('''COCM can be gamed when individuals make highly unequal donations to different projects.''')
+    st.write('''We can measure inequality in someone's donation via a tool called the [Gini Index](https://en.wikipedia.org/wiki/Gini_coefficient). An index of 0 means the donations are very even across projects. An index of 1 means the donations are highly uneven across projects.''')
+    st.write('''In this section, you can remove donors with highly unequal donation profiles.''')
+    gini_cutoff = st.slider('Select Inequality Cutoff:', min_value = 0.0, max_value = 1.0, value=1.0, step = 0.02)
+
+    removed_donors = [w for w in passing_donors if g_idx[w] > gini_cutoff]
+    num_removed_donors = len(removed_donors)
+    st.write(f'A cutoff of {gini_cutoff} will remove {num_removed_donors} out of {num_passing_donors} otherwise eligible donors ({round(num_removed_donors/num_passing_donors * 100)} \%)')
+
+
+    ### calculate matching results ###
+    matching_df = calculate_matching_results(data)
+
     # Quadratic Funding Method Comparison section
     st.header('💚 Quadratic Funding Method Comparison')
     st.write('''[Quadratic funding](https://wtfisqf.com) helps us solve coordination failures by creating a way for community members to fund what matters to them while amplifying their impact. However, its assumption that people make independent decisions can be exploited to unfairly influence the distribution of matching funds.''')
@@ -1096,10 +1127,9 @@ def main():
     data['projects_to_remove'] = st.multiselect('Projects may be removed from the matching distribution by selecting them here:', all_projects)
     data['df'] = data['df'][~data['df']['project_name'].isin(data['projects_to_remove'])]
     
-    # Calculate and display matching results
-    matching_df, donation_matrix = calculate_matching_results(data)
+
     display_matching_results(matching_df, data['config_df']['token_code'].iloc[0], data['suffix'], data['using TQF'])
-    display_singledonor_and_alldonor_stats(donation_matrix)
+    display_singledonor_and_alldonor_stats(data['donation_matrix'])
     display_network_graph(data['df'])
 
 
