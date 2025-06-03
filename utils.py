@@ -8,6 +8,7 @@ import psycopg2 as pg
 import json
 import time
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 ttl_short = 900 # 15 minutes
 ttl_long = 36000 # 10 hours
@@ -34,7 +35,7 @@ def run_query(query, params=None, database="grants"):
         conn.close()
     return results
 
-def load_data_from_url(url, headers = None):
+def load_data_from_url(url, headers=None, show_warnings=True):
     """Load JSON data from a given URL and return as a list of dictionaries."""
     try:
         response = requests.get(url, headers=headers, stream=True)
@@ -43,14 +44,52 @@ def load_data_from_url(url, headers = None):
         data = [json.loads(line) for line in lines if line]  # Ignore blank lines
         return data
     except requests.RequestException as e:
-        st.warning(f"Failed to fetch data from {url}. Error: {e}")
+        if show_warnings:
+            st.warning(f"Failed to fetch data from {url}. Error: {e}")
+        raise  # Re-raise so the calling function can handle it
     except json.JSONDecodeError as e:
-        st.warning(f"Failed to parse JSON data from {url}. Error: {e}")
+        if show_warnings:
+            st.warning(f"Failed to parse JSON data from {url}. Error: {e}")
         return []
 
-@st.cache_resource(ttl=ttl_long)
+def _fetch_single_passport_model_score(address: str, api_base_url: str, headers: dict) -> dict:
+    """Helper function to fetch a single passport model score."""
+    try:
+        model_url = f"{api_base_url}/v2/models/score/{address}"
+        model_response = load_data_from_url(model_url, headers, show_warnings=False)
+
+        if model_response:
+            data = model_response[0]  # load_data_from_url returns a list
+
+            print("DATA: ", data)
+            
+            return {
+                'address': address.lower(),
+                'rawScore': float(data.get('details', {}).get('models', {}).get('aggregate', {}).get('score', 0)),
+                'updated_at': data.get('last_score_timestamp', None),
+                'error': None
+            }
+        else:
+            # Handle API failure case
+            return {
+                'address': address.lower(),
+                'rawScore': 0,
+                'updated_at': None,
+                'error': 'API returned no data'
+            }
+            
+    except Exception as e:
+        # Don't use st.warning() in thread - return error info instead
+        return {
+            'address': address.lower(),
+            'rawScore': 0,
+            'updated_at': None,
+            'error': str(e)
+        }
+
+# @st.cache_resource(ttl=ttl_long)
 def load_passport_model_scores(addresses: List[str]) -> pd.DataFrame:
-    """Load passport model scores from Gitcoin Passport API v2."""
+    """Load passport model scores from Gitcoin Passport API v2 with parallel requests."""
     
     # API v2 configuration
     API_BASE_URL = "https://api.passport.xyz"
@@ -60,36 +99,31 @@ def load_passport_model_scores(addresses: List[str]) -> pd.DataFrame:
     }
     
     processed_data = []
+    errors = []
     
-    for address in addresses:
-        try:
-            # V2 API: Use models endpoint for ML-based scoring
-            model_url = f"{API_BASE_URL}/v2/models/score/{address}"
-            model_response = load_data_from_url(model_url, headers)
+    # Use ThreadPoolExecutor for parallel API calls
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        # Submit all requests
+        future_to_address = {
+            executor.submit(_fetch_single_passport_model_score, address, API_BASE_URL, headers): address 
+            for address in addresses
+        }
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_address):
+            result = future.result()
             
-            if model_response:
-                data = model_response[0]  # load_data_from_url returns a list
-                
-                processed_data.append({
-                    'address': address.lower(),
-                    'rawScore': float(data.get('score', 0)),
-                    'updated_at': data.get('last_score_timestamp')
-                })
-            else:
-                # Handle API failure case
-                processed_data.append({
-                    'address': address.lower(),
-                    'rawScore': 0,
-                    'updated_at': None
-                })
-                
-        except Exception as e:
-            st.warning(f"Error fetching model score for {address}: {e}")
-            processed_data.append({
-                'address': address.lower(),
-                'rawScore': 0,
-                'updated_at': None
-            })
+            # Collect errors to display later in main thread
+            if result.get('error'):
+                errors.append(f"Error fetching model score for {result['address']}: {result['error']}")
+            
+            # Remove error field before adding to processed_data
+            result_clean = {k: v for k, v in result.items() if k != 'error'}
+            processed_data.append(result_clean)
+    
+    # Display any errors that occurred (now in main thread with Streamlit context)
+    for error in errors:
+        st.warning(error)
     
     # Create DataFrame
     results = pd.DataFrame(processed_data)
@@ -131,7 +165,7 @@ def load_stamp_scores(addresses: List[str]) -> pd.DataFrame:
     }
     
     processed_data = []
-    scorer_id = "335"
+    scorer_id = st.secrets['config']['SCORER_ID']
     
     for address in addresses:
         try:
@@ -230,7 +264,7 @@ def load_stamp_scores_unified(addresses: List[str]) -> pd.DataFrame:
     }
     
     processed_data = []
-    scorer_id = "335"
+    scorer_id = st.secrets['config']['SCORER_ID']
     
     for address in addresses:
         # Single API call gets both score and stamp data
