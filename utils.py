@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import psycopg2 as pg
 import json
 import time
+from typing import List
 
 ttl_short = 900 # 15 minutes
 ttl_long = 36000 # 10 hours
@@ -47,18 +48,53 @@ def load_data_from_url(url, headers = None):
         st.warning(f"Failed to parse JSON data from {url}. Error: {e}")
         return []
 
-@st.cache_resource(ttl=ttl_long) 
-def load_passport_model_scores(addresses):
-    """Load and process passport model scores for given addresses."""
-    addresses = tuple(addresses)
-    sql_query_file = 'queries/get_passport_aggregate_model_scores.sql'
-    with open(sql_query_file, 'r') as file:
-        query = file.read()
-    params = {
-        'addresses': addresses
+@st.cache_resource(ttl=ttl_long)
+def load_passport_model_scores(addresses: List[str]) -> pd.DataFrame:
+    """Load passport model scores from Gitcoin Passport API v2."""
+    
+    # API v2 configuration
+    API_BASE_URL = "https://api.passport.xyz"
+    headers = {
+        'X-API-KEY': st.secrets['passport']['key'],
+        'Content-Type': 'application/json'
     }
-    results = run_query(query, params)
-    # Load Missing Scores
+    
+    processed_data = []
+    
+    for address in addresses:
+        try:
+            # V2 API: Use models endpoint for ML-based scoring
+            model_url = f"{API_BASE_URL}/v2/models/score/{address}"
+            model_response = load_data_from_url(model_url, headers)
+            
+            if model_response:
+                data = model_response[0]  # load_data_from_url returns a list
+                
+                processed_data.append({
+                    'address': address.lower(),
+                    'rawScore': float(data.get('score', 0)),
+                    'updated_at': data.get('last_score_timestamp')
+                })
+            else:
+                # Handle API failure case
+                processed_data.append({
+                    'address': address.lower(),
+                    'rawScore': 0,
+                    'updated_at': None
+                })
+                
+        except Exception as e:
+            st.warning(f"Error fetching model score for {address}: {e}")
+            processed_data.append({
+                'address': address.lower(),
+                'rawScore': 0,
+                'updated_at': None
+            })
+    
+    # Create DataFrame
+    results = pd.DataFrame(processed_data)
+    
+    # Keep the historical data fallback logic
     df = pd.read_parquet('data/gg21_donors_scored.parquet')
     df = df[['Address', 'aggregate_score']]
     df.columns = ['address', 'rawScore']
@@ -77,12 +113,94 @@ def load_passport_model_scores(addresses):
     df['address'] = df['address'].str.lower()
     df = df.drop_duplicates(subset='address', keep='last')
 
-    address_set = set(addresses)
+    address_set = set([addr.lower() for addr in addresses])
     missing_addresses = df[df['address'].isin(address_set) & ~df['address'].isin(results['address'])]
     results = pd.concat([results, missing_addresses], ignore_index=True)
     
-
     return results
+
+@st.cache_resource(ttl=ttl_long)
+def load_stamp_scores(addresses: List[str]) -> pd.DataFrame:
+    """Load and process passport stamp scores from Gitcoin Passport API v2."""
+    
+    # API v2 configuration
+    API_BASE_URL = "https://api.passport.xyz"
+    headers = {
+        'X-API-KEY': st.secrets['passport']['key'],
+        'Content-Type': 'application/json'
+    }
+    
+    processed_data = []
+    scorer_id = "335"
+    
+    for address in addresses:
+        try:
+            # V2 API: Single endpoint for both stamps and score data
+            score_url = f"{API_BASE_URL}/v2/stamps/{scorer_id}/score/{address}"
+            score_response = load_data_from_url(score_url, headers)
+            
+            if score_response:
+                data = score_response[0]  # load_data_from_url returns a list
+                
+                # Extract stamp data from stamp_scores
+                stamps = []
+                if 'stamp_scores' in data:
+                    for provider, score in data['stamp_scores'].items():
+                        stamps.append({
+                            'provider': provider,
+                            'score': float(score) if score else 0,
+                            'verified': float(score) > 0 if score else False
+                        })
+                
+                # If you need detailed stamp metadata, fetch from stamps endpoint
+                stamps_url = f"{API_BASE_URL}/v2/stamps/{address}"
+                stamps_response = load_data_from_url(stamps_url, headers)
+                
+                if stamps_response and stamps_response[0].get('items'):
+                    # Enhance stamps data with detailed metadata
+                    detailed_stamps = []
+                    for item in stamps_response[0]['items']:
+                        credential = item.get('credential', {})
+                        credential_subject = credential.get('credentialSubject', {})
+                        
+                        stamp_info = {
+                            'provider': credential_subject.get('provider'),
+                            'hash': credential_subject.get('hash'),
+                            'issuanceDate': credential.get('issuanceDate'),
+                            'expirationDate': credential.get('expirationDate'),
+                            'score': data.get('stamp_scores', {}).get(credential_subject.get('provider'), 0)
+                        }
+                        detailed_stamps.append(stamp_info)
+                    stamps = detailed_stamps
+                
+                processed_data.append({
+                    'address': address.lower(),
+                    'rawScore': float(data.get('score', 0)),
+                    'scoreTimestamp': data.get('last_score_timestamp'),
+                    'updatedAt': data.get('last_score_timestamp'),  # v2 doesn't have separate updated_at
+                    'stamps': stamps
+                })
+            else:
+                # Handle API failure case
+                processed_data.append({
+                    'address': address.lower(),
+                    'rawScore': 0,
+                    'scoreTimestamp': None,
+                    'updatedAt': None,
+                    'stamps': []
+                })
+                
+        except Exception as e:
+            st.warning(f"Error fetching passport data for {address}: {e}")
+            processed_data.append({
+                'address': address.lower(),
+                'rawScore': 0,
+                'scoreTimestamp': None,
+                'updatedAt': None,
+                'stamps': []
+            })
+    
+    return pd.DataFrame(processed_data)
 
 @st.cache_resource(ttl=ttl_long)
 def load_avax_scores(addresses):
@@ -103,17 +221,52 @@ def load_avax_scores(addresses):
     return scores
 
 @st.cache_resource(ttl=ttl_long)
-def load_stamp_scores(addresses):
-    """Load and process passport stamp scores for given addresses."""
-    addresses = tuple(addresses)
-    sql_query_file = 'queries/get_passport_stamps.sql'
-    with open(sql_query_file, 'r') as file:
-        query = file.read()
-    params = {
-        'addresses': addresses
+def load_stamp_scores_unified(addresses: List[str]) -> pd.DataFrame:
+    """Simplified version using v2 unified endpoint for stamps and scores."""
+    
+    headers = {
+        'X-API-KEY': st.secrets['passport']['key'],
+        'Content-Type': 'application/json'
     }
-    results = run_query(query, params)  
-    return results
+    
+    processed_data = []
+    scorer_id = "335"
+    
+    for address in addresses:
+        # Single API call gets both score and stamp data
+        url = f"https://api.passport.xyz/v2/stamps/{scorer_id}/score/{address}"
+        response = load_data_from_url(url, headers)
+        
+        if response:
+            data = response[0]
+            
+            # Convert stamp_scores to the expected stamps format
+            stamps = [
+                {
+                    'provider': provider,
+                    'score': float(score) if score else 0,
+                    'verified': float(score) > 0 if score else False
+                }
+                for provider, score in data.get('stamp_scores', {}).items()
+            ]
+            
+            processed_data.append({
+                'address': address.lower(),
+                'rawScore': float(data.get('score', 0)),
+                'scoreTimestamp': data.get('last_score_timestamp'),
+                'updatedAt': data.get('last_score_timestamp'),
+                'stamps': stamps
+            })
+        else:
+            processed_data.append({
+                'address': address.lower(),
+                'rawScore': 0,
+                'scoreTimestamp': None,
+                'updatedAt': None,
+                'stamps': []
+            })
+    
+    return pd.DataFrame(processed_data)
 
 def parse_config_file(file_content):
     """Parse the config file content and extract token information."""
