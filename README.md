@@ -1,4 +1,4 @@
-# 🧮 Quadratic Funding Calculator
+# 🧮 WIP: Quadratic Funding Calculator (Local Indexer + Passport v2 Setup)
 
 ## 📋 Overview
 This project is a Streamlit-based web application that calculates and visualizes matching results for Quadratic Funding (QF) rounds. It compares standard Quadratic Funding with Connection-Oriented Cluster Matching (COCM) to provide insights into fund distribution.
