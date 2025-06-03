@@ -37,7 +37,7 @@ def display_recent_rounds():
     rounds = get_recent_rounds_graphql(limit=100)
 
     # Create round links and prepare display data
-    rounds['Round Link'] = rounds.apply(lambda row: f"https://qf-calculator.fly.dev/?round_id={row['round_id']}&chain_id={row['chain_id']}", axis=1)
+    rounds['Round Link'] = rounds.apply(lambda row: f"{st.secrets['config']['BASE_URL']}/?round_id={row['round_id']}&chain_id={row['chain_id']}", axis=1)
     rounds_display = rounds[[
         'round_name', 
         'chain_id',
@@ -83,7 +83,7 @@ def validate_input():
     if st.session_state.round_id is None or st.session_state.chain_id is None:
         st.header("Oops! Something went wrong. You're not supposed to be here 🙈")
         st.subheader("Please provide round_id and chain_id in the URL")
-        st.subheader('Example: https://qf-calculator.fly.dev/?round_id=23&chain_id=42161')
+        st.subheader(f'Example: {st.secrets["config"]["BASE_URL"]}/?round_id=23&chain_id=42161')
         display_recent_rounds()
         st.stop()
     return st.session_state.round_id.lower(), int(st.session_state.chain_id)

@@ -72,7 +72,7 @@ def get_project_summary_graphql(chain_id, round_id, limit=200, offset=0):
         # Make the GraphQL request
         try:
             response = requests.post(
-                "https://beta.indexer.gitcoin.co/v1/graphql",
+                st.secrets["config"]["GRAPHQL_URL"],
                 json={"query": query, "variables": variables},
                 headers={"Content-Type": "application/json"}
             )
