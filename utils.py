@@ -102,7 +102,7 @@ def load_passport_model_scores(addresses: List[str]) -> pd.DataFrame:
     errors = []
     
     # Use ThreadPoolExecutor for parallel API calls
-    with ThreadPoolExecutor(max_workers=15) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         # Submit all requests
         future_to_address = {
             executor.submit(_fetch_single_passport_model_score, address, API_BASE_URL, headers): address 
