@@ -8,3 +8,6 @@ codebase.md
 data/checking_passport.ipynb
 .DS_Store
 .vscode
+.history/
+.venv/
+DB_MAP.md
