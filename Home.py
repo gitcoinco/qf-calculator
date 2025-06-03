@@ -96,15 +96,21 @@ def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
         score_at_50_percent = score_at_100_percent = 25
         sybilDefense = 'Avalanche Passport'
     elif sybilDefense == 'true': 
+        print("Loading Stamp Scores")
+        print("Unique Voters: ", len(unique_voters))
         scores = utils.load_stamp_scores(unique_voters)
         score_at_50_percent, score_at_100_percent = 15, 25
         sybilDefense = 'Passport Stamps'
     elif sybilDefense == 'passport-mbds':
+        print("Loading Passport Model Scores")
+        print("Unique Voters: ", len(unique_voters))
         scores = utils.load_passport_model_scores(unique_voters)
         score_at_50_percent, score_at_100_percent = 25,50
         sybilDefense = 'Passport Model Based Detection System'
     else:
         # If no Sybil defense is set, assign a default score of 1 to all voters
+        print("Loading Default Scores")
+        print("Unique Voters: ", len(unique_voters))
         scores = pd.DataFrame({'address': unique_voters, 'rawScore': 1})
         score_at_50_percent = score_at_100_percent = 0
         sybilDefense = 'None'
@@ -126,7 +132,7 @@ def load_data(round_id, chain_id):
                           534352: "Scroll", 1329: "SEI", 42220: "Celo", 1088: "Metis", 42: "Lukso" }
     rounds = get_round_summary_graphql(chain_id, round_id)
     
-    token = rounds['token'].values[0] if 'token' in rounds else 'ETH'    
+    token = rounds['token'].values[0] if 'token' in rounds else 'ETH' 
     sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else 'None'
     df = get_votes_by_round_graphql(chain_id, round_id)
 
