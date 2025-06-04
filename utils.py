@@ -87,9 +87,11 @@ def _fetch_single_passport_model_score(address: str, api_base_url: str, headers:
             'error': str(e)
         }
 
-# @st.cache_resource(ttl=ttl_long)
-def load_passport_model_scores(addresses: List[str]) -> pd.DataFrame:
+@st.cache_resource(ttl=ttl_long)
+def load_passport_model_scores(addresses: tuple) -> pd.DataFrame:
     """Load passport model scores from Gitcoin Passport API v2 with parallel requests."""
+
+    addresses = list(addresses)
     
     # API v2 configuration
     API_BASE_URL = "https://api.passport.xyz"
