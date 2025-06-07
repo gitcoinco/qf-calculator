@@ -53,6 +53,8 @@ This project is a Streamlit-based web application that calculates and visualizes
 [config]
 BASE_URL = "http://localhost:8501"
 GRAPHQL_URL = "http://hasura_graphql_endpoint"
+SCORER_ID = "335"
+DISABLE_API = false # only set to true if you have access to Passport database
 
 [grants]
 host = "indexer_db_host"
