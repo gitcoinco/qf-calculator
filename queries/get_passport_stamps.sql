@@ -1,8 +1,8 @@
 SELECT
   "public"."Passport"."userAddress" AS "address",
-  "public"."Passport"."score" AS "rawScore",
-  to_timestamp("public"."Passport"."scoreTimestamp") AS "scoreTimestamp",
-  to_timestamp("public"."Passport"."updatedAt") AS "updatedAt",
+  "public"."Passport"."score"::numeric AS "rawScore",
+  "public"."Passport"."scoreTimestamp"::timestamptz AS "scoreTimestamp",
+  "public"."Passport"."updatedAt"::timestamptz AS "updatedAt",
   "public"."Passport"."stamps" AS "stamps"
 FROM
   "public"."Passport"

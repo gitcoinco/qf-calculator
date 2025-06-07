@@ -4,4 +4,6 @@ SELECT
     updated_at
 FROM
     public.passport_model_scores
-WHERE lower(address) IN %(addresses)s
+WHERE 
+    model = 'aggregate_model'
+    AND lower(address) IN %(addresses)s
