@@ -9,18 +9,36 @@ import json
 import time
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
 
 ttl_short = 900 # 15 minutes
 ttl_long = 36000 # 10 hours
 
+def get_config_value(section, key, env_override=None):
+    """
+    Get configuration value with optional environment variable override
+    """
+    # Use custom env var name if provided, otherwise try section.key format
+    env_var = env_override or f"{section}.{key}"
+    env_value = os.getenv(env_var)
+    
+    if env_value is not None:
+        return env_value
+    
+    # Fallback to secrets.toml
+    try:
+        return st.secrets[section][key]
+    except (KeyError, FileNotFoundError):
+        raise ValueError(f"Configuration not found: [{section}] {key}")
+
 def run_query(query, params=None, database="grants"):
     """Run a parameterized query on the specified database and return results as a DataFrame."""
     try:
-        conn = pg.connect(host=st.secrets[database]["host"], 
-                            port=st.secrets[database]["port"], 
-                            dbname=st.secrets[database]["dbname"], 
-                            user=st.secrets[database]["user"], 
-                            password=st.secrets[database]["password"])
+        conn = pg.connect(host=get_config_value(database,"host"), 
+                            port=get_config_value(database,"port"), 
+                            dbname=get_config_value(database,"dbname"), 
+                            user=get_config_value(database,"user"), 
+                            password=get_config_value(database,"password"))
         cur = conn.cursor()
         if params is None:
             cur.execute(query)
@@ -60,8 +78,6 @@ def _fetch_single_passport_model_score(address: str, api_base_url: str, headers:
 
         if model_response:
             data = model_response[0]  # load_data_from_url returns a list
-
-            print("DATA: ", data)
             
             return {
                 'address': address.lower(),
@@ -87,8 +103,60 @@ def _fetch_single_passport_model_score(address: str, api_base_url: str, headers:
             'error': str(e)
         }
 
+def load_passport_model_scores(addresses):
+    """Load passport model scores for given addresses using either API or DB based on configuration."""
+    if st.secrets["config"]["DISABLE_API"]:
+        return load_passport_model_scores_db(addresses)
+    else:
+        return load_passport_model_scores_api(tuple(addresses))
+
+@st.cache_resource(ttl=ttl_long) 
+def load_passport_model_scores_db(addresses):
+    """Load and process passport model scores for given addresses."""
+
+    addresses = tuple(addresses)
+    sql_query_file = 'queries/get_passport_aggregate_model_scores.sql'
+    with open(sql_query_file, 'r') as file:
+        query = file.read()
+    params = {
+        'addresses': addresses
+    }
+    results = run_query(query, params)
+
+    # Load Missing Scores
+    df = pd.read_parquet('data/gg21_donors_scored.parquet')
+    df = df[['Address', 'aggregate_score']]
+    df.columns = ['address', 'rawScore']
+
+    df_22 = pd.read_csv('data/gg22_donors_scored.csv')
+    df_22 = df_22[['Address', 'aggregate_score']]
+    df_22.columns = ['address', 'rawScore']
+    df_22['rawScore'] = df_22['rawScore'].fillna(0)
+
+    df_23 = pd.read_csv('data/gg23_donors_scored.csv')
+    df_23 = df_23[['Address', 'aggregate_score']]
+    df_23.columns = ['address', 'rawScore']
+    df_23['rawScore'] = df_23['rawScore'].fillna(0)
+
+    df = pd.concat([df, df_22, df_23], ignore_index=True)
+    df['address'] = df['address'].str.lower()
+    df = df.drop_duplicates(subset='address', keep='last')
+
+    # Ensure addresses are lowercase for comparison
+    addresses_lower = set(addr.lower() for addr in addresses)
+    results['address'] = results['address'].str.lower() 
+
+    address_set = set(addresses_lower)
+    missing_addresses = df[df['address'].isin(address_set) & ~df['address'].isin(results['address'])]
+    results = pd.concat([missing_addresses, results], ignore_index=True)
+    results = results.drop_duplicates(subset='address', keep='last')
+
+    results = results[results['address'].isin(address_set)]
+
+    return results
+
 @st.cache_resource(ttl=ttl_long)
-def load_passport_model_scores(addresses: tuple) -> pd.DataFrame:
+def load_passport_model_scores_api(addresses: tuple) -> pd.DataFrame:
     """Load passport model scores from Gitcoin Passport API v2 with parallel requests."""
 
     addresses = list(addresses)
@@ -155,19 +223,39 @@ def load_passport_model_scores(addresses: tuple) -> pd.DataFrame:
     
     return results
 
+def load_stamp_scores(addresses):
+    """Load and process passport stamp scores for given addresses."""
+    if st.secrets["config"]["DISABLE_API"]:
+        return load_stamp_scores_db(addresses)
+    else:
+        return load_stamp_scores_api(list(addresses))
+
 @st.cache_resource(ttl=ttl_long)
-def load_stamp_scores(addresses: List[str]) -> pd.DataFrame:
+def load_stamp_scores_db(addresses):
+    """Load and process passport stamp scores for given addresses."""
+    addresses = tuple(addresses)
+    sql_query_file = 'queries/get_passport_stamps.sql'
+    with open(sql_query_file, 'r') as file:
+        query = file.read()
+    params = {
+        'addresses': addresses
+    }
+    results = run_query(query, params)  
+    return results
+
+@st.cache_resource(ttl=ttl_long)
+def load_stamp_scores_api(addresses: List[str]) -> pd.DataFrame:
     """Load and process passport stamp scores from Gitcoin Passport API v2."""
     
     # API v2 configuration
     API_BASE_URL = "https://api.passport.xyz"
     headers = {
-        'X-API-KEY': st.secrets['passport']['key'],
+        'X-API-KEY': get_config_value('passport','key'),
         'Content-Type': 'application/json'
     }
     
     processed_data = []
-    scorer_id = st.secrets['config']['SCORER_ID']
+    scorer_id = get_config_value('config','SCORER_ID')
     
     for address in addresses:
         try:
@@ -243,7 +331,7 @@ def load_avax_scores(addresses):
 
     """Load and process Avalanche scores for given addresses."""
 
-    scores = pd.concat([pd.DataFrame(load_data_from_url(f'https://api.passport.xyz/v2/stamps/335/score/{a}', headers = {'X-API-KEY': st.secrets['passport']['key']})) for a in addresses])
+    scores = pd.concat([pd.DataFrame(load_data_from_url(f'https://api.passport.xyz/v2/stamps/335/score/{a}', headers = {'X-API-KEY': get_config_value('passport','key')})) for a in addresses])
 
     #scores = scores.join(pd.json_normalize(scores['evidence'])).drop('evidence', axis=1)
     #scores = scores.join(pd.json_normalize(scores['passport'])).drop('passport', axis=1) 
@@ -261,12 +349,12 @@ def load_stamp_scores_unified(addresses: List[str]) -> pd.DataFrame:
     """Simplified version using v2 unified endpoint for stamps and scores."""
     
     headers = {
-        'X-API-KEY': st.secrets['passport']['key'],
+        'X-API-KEY': get_config_value('passport','key'),
         'Content-Type': 'application/json'
     }
     
     processed_data = []
-    scorer_id = st.secrets['config']['SCORER_ID']
+    scorer_id = get_config_value('config','SCORER_ID')
     
     for address in addresses:
         # Single API call gets both score and stamp data
@@ -369,7 +457,7 @@ def fetch_tokens_config():
     return df
 
 @st.cache_resource(ttl=ttl_long)
-def fetch_latest_price(chain_id, token_address, coingecko_api_key=st.secrets['coingecko']['COINGECKO_API_KEY'], coingecko_api_url="https://api.coingecko.com/api/v3"):
+def fetch_latest_price(chain_id, token_address, coingecko_api_key=get_config_value('coingecko','COINGECKO_API_KEY'), coingecko_api_url="https://api.coingecko.com/api/v3"):
     """Fetch the latest price for a given token on a specific chain."""
     # https://github.com/gitcoinco/grants-stack-indexer/blob/main/src/prices/coinGecko.ts
     platforms = {
