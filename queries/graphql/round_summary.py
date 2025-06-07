@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+from utils import get_config_value
 
 # Cache TTL values
 ttl_short = 900  # 15 minutes
@@ -58,7 +59,7 @@ def get_round_summary_graphql(chain_id=None, round_id=None):
     # Make the GraphQL request
     try:
         response = requests.post(
-            st.secrets["config"]["GRAPHQL_URL"],
+            get_config_value("config","GRAPHQL_URL"),
             json={"query": query, "variables": variables},
             headers={"Content-Type": "application/json"}
         )

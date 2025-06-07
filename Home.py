@@ -37,7 +37,8 @@ def display_recent_rounds():
     rounds = get_recent_rounds_graphql(limit=100)
 
     # Create round links and prepare display data
-    rounds['Round Link'] = rounds.apply(lambda row: f"{st.secrets['config']['BASE_URL']}/?round_id={row['round_id']}&chain_id={row['chain_id']}", axis=1)
+    base_url = utils.get_config_value('config','BASE_URL')
+    rounds['Round Link'] = rounds.apply(lambda row: f"{base_url}/?round_id={row['round_id']}&chain_id={row['chain_id']}", axis=1)
     rounds_display = rounds[[
         'round_name', 
         'chain_id',
@@ -83,7 +84,7 @@ def validate_input():
     if st.session_state.round_id is None or st.session_state.chain_id is None:
         st.header("Oops! Something went wrong. You're not supposed to be here 🙈")
         st.subheader("Please provide round_id and chain_id in the URL")
-        st.subheader(f'Example: {st.secrets["config"]["BASE_URL"]}/?round_id=23&chain_id=42161')
+        st.subheader(f'Example: {utils.get_config_value("config","BASE_URL")}/?round_id=23&chain_id=42161')
         display_recent_rounds()
         st.stop()
     return st.session_state.round_id.lower(), int(st.session_state.chain_id)
@@ -96,21 +97,15 @@ def load_scores_and_set_defense(chain_id, sybilDefense, unique_voters):
         score_at_50_percent = score_at_100_percent = 25
         sybilDefense = 'Avalanche Passport'
     elif sybilDefense == 'true': 
-        print("Loading Stamp Scores")
-        print("Unique Voters: ", len(unique_voters))
         scores = utils.load_stamp_scores(unique_voters)
         score_at_50_percent, score_at_100_percent = 15, 25
         sybilDefense = 'Passport Stamps'
     elif sybilDefense == 'passport-mbds':
-        print("Loading Passport Model Scores")
-        print("Unique Voters: ", len(unique_voters))
-        scores = utils.load_passport_model_scores(tuple(unique_voters))
+        scores = utils.load_passport_model_scores(unique_voters)
         score_at_50_percent, score_at_100_percent = 25,50
         sybilDefense = 'Passport Model Based Detection System'
     else:
         # If no Sybil defense is set, assign a default score of 1 to all voters
-        print("Loading Default Scores")
-        print("Unique Voters: ", len(unique_voters))
         scores = pd.DataFrame({'address': unique_voters, 'rawScore': 1})
         score_at_50_percent = score_at_100_percent = 0
         sybilDefense = 'None'
@@ -133,8 +128,7 @@ def load_data(round_id, chain_id):
     rounds = get_round_summary_graphql(chain_id, round_id)
     
     token = rounds['token'].values[0] if 'token' in rounds else 'ETH' 
-    # sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else 'None'
-    sybilDefense = 'None'
+    sybilDefense = rounds['sybilDefense'].values[0] if 'sybilDefense' in rounds else 'None'
     df = get_votes_by_round_graphql(chain_id, round_id)
 
     # with open("votes.txt", "w") as f:

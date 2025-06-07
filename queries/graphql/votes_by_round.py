@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+from utils import get_config_value
 
 # Cache TTL values
 ttl_short = 900  # 15 minutes
@@ -81,7 +82,7 @@ def get_votes_by_round_graphql(chain_id, round_id, limit=200, offset=0):
         # Make the GraphQL request
         try:
             response = requests.post(
-                st.secrets["config"]["GRAPHQL_URL"],
+                get_config_value("config","GRAPHQL_URL"),
                 json={"query": query, "variables": variables},
                 headers={"Content-Type": "application/json"}
             )
