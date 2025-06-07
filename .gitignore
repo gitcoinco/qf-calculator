@@ -11,3 +11,5 @@ data/checking_passport.ipynb
 .history/
 .venv/
 DB_MAP.md
+passport/*.parquet
+passport/*.jsonl
