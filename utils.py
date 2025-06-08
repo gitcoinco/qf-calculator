@@ -105,7 +105,7 @@ def _fetch_single_passport_model_score(address: str, api_base_url: str, headers:
 
 def load_passport_model_scores(addresses):
     """Load passport model scores for given addresses using either API or DB based on configuration."""
-    if st.secrets["config"]["DISABLE_API"]:
+    if get_config_value('config','DISABLE_API'):
         return load_passport_model_scores_db(addresses)
     else:
         return load_passport_model_scores_api(tuple(addresses))
@@ -225,7 +225,7 @@ def load_passport_model_scores_api(addresses: tuple) -> pd.DataFrame:
 
 def load_stamp_scores(addresses):
     """Load and process passport stamp scores for given addresses."""
-    if st.secrets["config"]["DISABLE_API"]:
+    if get_config_value('config','DISABLE_API'):
         return load_stamp_scores_db(addresses)
     else:
         return load_stamp_scores_api(list(addresses))
